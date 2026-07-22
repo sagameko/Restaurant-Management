@@ -1,8 +1,9 @@
 # Data dictionary
 
-Documents every table as it is implemented. Only the seed layer exists so
-far (Phase 1 / Phase 2 slice); generated tables (orders, shifts, reviews,
-inventory movements, ...) will be added here as later phases land.
+Documents every table as it is implemented. The seed layer (Phase 1/2)
+and the daily-context/orders/order-items/reviews generated tables
+(Phase 3) exist so far; employee shifts and inventory movements will be
+added here once Phase 4/5 land.
 
 ## Seed tables (`data/seed/`)
 
@@ -101,3 +102,112 @@ Every menu item has at least one recipe row, and every recipe row
 references a real menu item and ingredient — enforced by
 `restaurant_ops.ingestion.loader.validate_referential_integrity` and
 covered by `tests/unit/test_recipe_costs.py`.
+
+## Generated tables (`data/raw/`, Phase 3)
+
+Produced by `restaurant_ops.generation` (via `scripts/generate_data.py`)
+from the seed tables above plus `config/simulation.yaml` and
+`config/business_rules.yaml`. Reproducible from a seed: the same
+`--seed` always produces byte-identical output (single
+`numpy.random.Generator`, seeded once, threaded through every generator
+function in a fixed call order). All of it is synthetic.
+
+### `daily_context.csv`
+
+- **Purpose**: the calendar/weather table every other generator reads
+  demand signals from.
+- **Grain**: one row per business date.
+- **Primary key**: `business_date`.
+- **Foreign keys**: none.
+- **Synthetic/public-source status**: `temperature_c`/`rain_mm` are a
+  synthetic seasonal model (see `docs/limitations.md`); public holiday
+  dates are computed from real Victorian public holiday rules (a
+  calendar fact, not synthetic or confidential); `city_event_flag`
+  marks fictional events.
+
+| Column | Description |
+|---|---|
+| `business_date` | Calendar date. |
+| `day_name` | Day of week, e.g. `Friday`. |
+| `temperature_c` | Synthetic daily temperature. |
+| `rain_mm` | Synthetic daily rainfall; `0.0` on dry days. |
+| `weekend_flag` | Saturday or Sunday. |
+| `public_holiday_flag` | A real Victorian public holiday. |
+| `city_event_flag` | A fictional recurring city event. |
+| `promotion_name` | The promotion scheduled for this weekday, if any (not every order redeems it — see `orders.promotion_name`). |
+
+### `orders.csv`
+
+- **Purpose**: one row per synthetic restaurant order.
+- **Grain**: one row per order.
+- **Primary key**: `order_id`.
+- **Foreign keys**: none stored on this table (order items reference it).
+- **Synthetic/public-source status**: entirely synthetic.
+
+| Column | Description |
+|---|---|
+| `order_id` | Unique order identifier, e.g. `ORD012345`. |
+| `order_timestamp` | Date and time the order was placed. |
+| `business_date` | Calendar date, joins to `daily_context.business_date`. |
+| `daypart` | `lunch` or `dinner`. |
+| `channel` | `dine_in`, `pickup`, `uber_eats`, or `doordash`. |
+| `status` | `Completed`, `Cancelled`, or `Partially Refunded`. |
+| `table_number` | Set only for `dine_in`; null otherwise. |
+| `customer_count` | Set only for `dine_in`; null otherwise. |
+| `promotion_name` | Set only if this specific order redeemed the day's promotion. |
+| `subtotal` | Sum of `order_items.line_total`. |
+| `discount_amount` | Promotion discount applied to this order. |
+| `refund_amount` | Non-zero only for `Cancelled` (full refund) or `Partially Refunded` (partial). |
+| `platform_commission` | `(subtotal - discount_amount) x commission_rate`; zero for `dine_in`/`pickup` and for cancelled orders. |
+| `net_sales` | `subtotal - discount_amount - refund_amount - platform_commission`. |
+| `estimated_food_cost` | Sum of `order_items.estimated_line_food_cost`. |
+| `estimated_gross_profit` | `net_sales - estimated_food_cost`. |
+| `preparation_minutes` | Kitchen prep time, rises with `kitchen_load_ratio`. |
+| `promised_minutes` | Channel-specific service promise (see `docs/business_rules.md`). |
+| `late_flag` | Whether the order missed its promised time (delivery orders factor in a notional transit leg). |
+| `missing_item_flag` | Whether one basket item was marked `Missing` on `order_items`. |
+| `kitchen_staff_count` / `front_of_house_staff_count` | Phase 3 roster placeholder — see `docs/business_rules.md` staffing section. |
+| `kitchen_load_ratio` | `orders_in_the_same_hour / estimated_kitchen_capacity`. |
+| `temperature_c` / `rain_mm` | Copied from `daily_context` for this order's date, for convenience. |
+
+### `order_items.csv`
+
+- **Purpose**: the basket contents of every order.
+- **Grain**: one row per (order, menu item line).
+- **Primary key**: `order_item_id`.
+- **Foreign keys**: `order_id` -> `orders.order_id`;
+  `menu_item_id` -> `menu_items.menu_item_id`.
+- **Synthetic/public-source status**: entirely synthetic.
+
+| Column | Description |
+|---|---|
+| `order_item_id` | Unique line identifier, e.g. `OI0123456`. |
+| `order_id` | The order this line belongs to. |
+| `menu_item_id` | The menu item ordered. |
+| `quantity` | Units ordered on this line. |
+| `unit_price` | Menu selling price at time of order. |
+| `estimated_unit_food_cost` | Per-serving estimated food cost (from `restaurant_ops.ingestion.loader.compute_menu_item_food_costs`). |
+| `line_total` | `unit_price x quantity`. |
+| `estimated_line_food_cost` | `estimated_unit_food_cost x quantity`. |
+| `special_request` | Free-text request (e.g. "no coriander"), or null. |
+| `item_status` | `Fulfilled` or `Missing`. Exactly one line is `Missing` when `orders.missing_item_flag` is true. |
+
+### `reviews.csv`
+
+- **Purpose**: a sampled subset of orders with a customer review.
+- **Grain**: one row per review (not every order gets one).
+- **Primary key**: `review_id`.
+- **Foreign keys**: `order_id` -> `orders.order_id`.
+- **Synthetic/public-source status**: entirely synthetic; review text is
+  templated, not scraped.
+
+| Column | Description |
+|---|---|
+| `review_id` | Unique review identifier, e.g. `REV001234`. |
+| `order_id` | The order being reviewed. Never a `Cancelled` order. |
+| `review_date` | A few days after `orders.business_date`, clamped to the simulation window. |
+| `channel` | Copied from the order. |
+| `rating` | 1-5, formula-driven (see `docs/business_rules.md`), never uniform random. |
+| `review_text` | A template selected by rating band. |
+| `complaint_category` | `"Missing Item"`, `"Late Order"`, a random category for other low ratings, or null. |
+| `response_required_flag` | True if `rating <= 2` or a complaint category was assigned. |

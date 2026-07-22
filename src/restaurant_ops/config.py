@@ -65,3 +65,22 @@ def load_simulation_settings(path: Path | None = None) -> SimulationSettings:
 def get_simulation_settings() -> SimulationSettings:
     """Cached accessor for the default simulation settings."""
     return load_simulation_settings()
+
+
+def load_business_rules(path: Path | None = None) -> dict:
+    """Load `config/business_rules.yaml` as a plain dict.
+
+    Unlike `SimulationSettings`, this isn't modelled as nested Pydantic
+    classes: it's a flat set of tunable generator constants (demand
+    multipliers, staffing placeholders, review templates, ...) that's
+    consumed directly by `restaurant_ops.generation`, not by end users.
+    """
+    config_path = path or CONFIG_DIR / "business_rules.yaml"
+    with config_path.open("r", encoding="utf-8") as handle:
+        return yaml.safe_load(handle)
+
+
+@lru_cache(maxsize=1)
+def get_business_rules() -> dict:
+    """Cached accessor for the default business-rules configuration."""
+    return load_business_rules()

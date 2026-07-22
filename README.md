@@ -20,10 +20,14 @@ with Bon Bon Boy and does not use confidential business information.
 ## Status
 
 Work in progress. Implemented so far: seed data (menu, ingredients,
-suppliers, recipes), referential-integrity validation, and estimated
-food-cost calculation per menu item. Synthetic order generation, DuckDB +
-dbt transformations, the Streamlit dashboard and demand forecasting are
-still to come.
+suppliers, recipes) with referential-integrity validation and estimated
+food-cost calculation per menu item; and a full synthetic order-generation
+pipeline (daily weather/calendar context, orders, order items, and
+customer reviews) with demand, channel, kitchen-load and review-rating
+relationships driven by `config/business_rules.yaml`. DuckDB + dbt
+transformations, the Streamlit dashboard and demand forecasting are still
+to come. See `docs/limitations.md` for what the synthetic data does and
+doesn't represent.
 
 ## Setup
 
@@ -57,6 +61,17 @@ validate_referential_integrity(menu_items, ingredients, suppliers, recipes)
 print(build_seed_report(menu_items, ingredients, recipes))
 "
 ```
+
+## Generating synthetic order data
+
+```bash
+uv run python scripts/generate_data.py --start-date 2025-07-01 --days 365 --average-orders 100 --seed 42
+```
+
+Writes `data/raw/daily_context.csv`, `orders.csv`, `order_items.csv` and
+`reviews.csv`. The same seed always reproduces the same dataset. See
+`docs/business_rules.md` for the demand/channel/staffing/review model,
+and `docs/data_dictionary.md` for the table schemas.
 
 ## Development
 
