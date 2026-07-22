@@ -1,8 +1,26 @@
 # Restaurant Operations Intelligence Platform
 
-An end-to-end restaurant data platform that simulates realistic operational
-data, transforms it into reliable analytical models, and presents
-actionable insights through an interactive Streamlit application.
+[![CI](https://github.com/sagameko/Restaurant-Management/actions/workflows/ci.yml/badge.svg)](https://github.com/sagameko/Restaurant-Management/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)
+![uv](https://img.shields.io/badge/managed%20with-uv-DE5FE9)
+![DuckDB](https://img.shields.io/badge/warehouse-DuckDB-FFF000?logo=duckdb&logoColor=black)
+![dbt](https://img.shields.io/badge/transform-dbt-FF694B?logo=dbt&logoColor=white)
+![Streamlit](https://img.shields.io/badge/app-Streamlit-FF4B4B?logo=streamlit&logoColor=white)
+![pytest](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white)
+![Ruff](https://img.shields.io/badge/lint%2Fformat-Ruff-D7FF64?logo=ruff&logoColor=black)
+![License: MIT](https://img.shields.io/badge/license-MIT-lightgrey)
+
+A restaurant doesn't run on one spreadsheet — it runs on the collision of
+orders, staffing, inventory, weather, and how customers actually felt
+about their food. This project builds that whole story from scratch: a
+synthetic Vietnamese restaurant, simulated day by day for a year, whose
+data actually behaves the way a real kitchen does — get busy enough and
+prep times climb, ratings dip, and stock runs thin.
+
+It's a full pipeline, not a notebook: a reproducible Python data
+generator with real operational logic, a dbt-on-DuckDB warehouse with a
+proper star schema, and (coming next) a Streamlit app that turns all of
+it into decisions a restaurant manager could actually use.
 
 The central project question:
 
@@ -17,6 +35,23 @@ reference material. No confidential customer, employee, supplier, recipe,
 financial or transaction data is included. This project is not affiliated
 with Bon Bon Boy and does not use confidential business information.
 
+## Tech stack
+
+| Layer | Technology | Why |
+|---|---|---|
+| Language & tooling | Python 3.12, [uv](https://docs.astral.sh/uv/) | Fast, modern dependency management — no separate pip/venv/poetry dance. |
+| Data generation | pandas, NumPy | A seeded `numpy.random.Generator` threaded through every generator function makes the whole year reproducible from one `--seed`. |
+| Validation | Pydantic v2 | Seed data (menu, ingredients, employees...) is validated row-by-row on load; generated tables use vectorised pandas checks at scale. |
+| Warehouse | [DuckDB](https://duckdb.org/) | Single-file, zero-config, embedded OLAP engine — no server to run for ~170k rows of synthetic data. |
+| Transformation | [dbt](https://www.getdbt.com/) | Layered SQL (staging → intermediate → dimensions/facts → marts), with dependency resolution, testing, and docs built in. |
+| App (Phase 7) | [Streamlit](https://streamlit.io/) + Plotly | Seven pages reading straight from the dbt marts. |
+| Quality | pytest, [Ruff](https://docs.astral.sh/ruff/) | 60+ tests including an end-to-end pipeline test; Ruff replaces flake8 + isort + black + pyupgrade in one fast tool. |
+| CI | GitHub Actions | Lint → test → generate → load → `dbt build` → verify marts, on every PR. |
+
+See `docs/architecture.md` for how the pieces actually fit together, and
+`docs/business_rules.md` for the (surprisingly deep) business logic
+behind the synthetic data.
+
 ## Status
 
 Work in progress. Implemented so far: seed data (menu, ingredients,
@@ -25,10 +60,12 @@ estimated food-cost calculation per menu item; a full synthetic
 generation pipeline (daily weather/calendar context, employee shifts,
 orders, order items, customer reviews, and inventory movements) with
 demand, channel, kitchen-load, staffing/absence, and inventory-reorder
-relationships driven by `config/business_rules.yaml`. DuckDB + dbt
-transformations, the Streamlit dashboard and demand forecasting are still
-to come. See `docs/limitations.md` for what the synthetic data does and
-doesn't represent.
+relationships driven by `config/business_rules.yaml`; and a complete
+DuckDB + dbt transformation layer (staging → intermediate →
+dimensions/facts → 7 analytical marts, 98 passing dbt checks). The
+Streamlit dashboard and demand forecasting are still to come. See
+`docs/limitations.md` for what the synthetic data does and doesn't
+represent, and `docs/architecture.md` for how the pieces fit together.
 
 ## Setup
 
@@ -74,6 +111,23 @@ Writes `data/raw/daily_context.csv`, `employee_shifts.csv`, `orders.csv`,
 seed always reproduces the same dataset. See `docs/business_rules.md`
 for the demand/channel/staffing/inventory/review model, and
 `docs/data_dictionary.md` for the table schemas.
+
+## Loading into DuckDB and running dbt
+
+```bash
+uv run python scripts/load_raw_data.py
+cp dbt_restaurant/profiles.yml.example dbt_restaurant/profiles.yml  # first time only
+uv run dbt build --project-dir dbt_restaurant --profiles-dir dbt_restaurant
+```
+
+Always run dbt from the repository root with `--profiles-dir
+dbt_restaurant` — see `docs/architecture.md` for why. Browse the star
+schema and column-level docs with:
+
+```bash
+uv run dbt docs generate --project-dir dbt_restaurant --profiles-dir dbt_restaurant
+uv run dbt docs serve --project-dir dbt_restaurant --profiles-dir dbt_restaurant
+```
 
 ## Development
 

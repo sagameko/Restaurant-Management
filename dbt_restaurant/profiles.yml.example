@@ -1,0 +1,15 @@
+# Copy this file to profiles.yml (gitignored) in this directory, or set
+# DBT_PROFILES_DIR to point here. No credentials needed — DuckDB is a
+# local embedded database file, not a server.
+#
+# dbt-duckdb resolves `path` relative to the shell's working directory
+# at invocation time, not the project directory — so this path assumes
+# dbt is always run from the repository root, e.g.:
+#   uv run dbt build --project-dir dbt_restaurant --profiles-dir dbt_restaurant
+restaurant_ops:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: data/database/restaurant.duckdb
+      threads: 4

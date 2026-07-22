@@ -227,6 +227,31 @@ from a small set of hand-written templates keyed by rating band
 (positive/neutral/negative) in `config/business_rules.yaml: reviews.templates`
 — clearly synthetic, not scraped review content.
 
+## Menu-engineering classification (dbt, Phase 6)
+
+Implemented in `dbt_restaurant/models/marts/mart_menu_engineering.sql`.
+An item's `units_sold` (from fulfilled, non-cancelled order items only)
+and `contribution_margin_pct` are each compared against the **median**
+across all menu items — not a fixed absolute threshold, since "good"
+sales volume or margin only means anything relative to this specific
+menu:
+
+```
+popularity_classification    = 'High' if units_sold >= median(units_sold) else 'Low'
+profitability_classification = 'High' if contribution_margin_pct >= median(contribution_margin_pct) else 'Low'
+
+menu_engineering_classification:
+  Star      = High popularity + High profitability
+  Plowhorse = High popularity + Low profitability
+  Puzzle    = Low popularity + High profitability
+  Dog       = Low popularity + Low profitability
+```
+
+A median split means every item is classified relative to this menu's
+own middle, which is why the four categories come out roughly balanced
+in practice (see `docs/development_log.md`) rather than skewed toward
+one label.
+
 ## Weather and calendar assumptions
 
 Temperature follows a synthetic seasonal cosine curve for Melbourne

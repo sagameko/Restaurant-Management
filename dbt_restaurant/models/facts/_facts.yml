@@ -1,0 +1,103 @@
+version: 2
+
+models:
+  - name: fact_orders
+    description: One row per restaurant order.
+    columns:
+      - name: order_id
+        data_tests:
+          - unique
+          - not_null
+      - name: channel
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_channel')
+                field: channel
+      - name: status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["Completed", "Cancelled", "Partially Refunded"]
+      - name: daypart
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["lunch", "dinner"]
+
+  - name: fact_order_items
+    description: One row per order line item.
+    columns:
+      - name: order_item_id
+        data_tests:
+          - unique
+          - not_null
+      - name: order_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('fact_orders')
+                field: order_id
+      - name: menu_item_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_menu_item')
+                field: menu_item_id
+      - name: item_status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["Fulfilled", "Missing"]
+
+  - name: fact_employee_shifts
+    description: One row per scheduled employee shift.
+    columns:
+      - name: shift_id
+        data_tests:
+          - unique
+          - not_null
+      - name: employee_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_employee')
+                field: employee_id
+
+  - name: fact_reviews
+    description: One row per customer review.
+    columns:
+      - name: review_id
+        data_tests:
+          - unique
+          - not_null
+      - name: order_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('fact_orders')
+                field: order_id
+
+  - name: fact_inventory_movements
+    description: One row per inventory ledger movement.
+    columns:
+      - name: movement_id
+        data_tests:
+          - unique
+          - not_null
+      - name: ingredient_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_ingredient')
+                field: ingredient_id
+      - name: movement_type
+        data_tests:
+          - accepted_values:
+              arguments:
+                values:
+                  - Supplier Delivery
+                  - Sales Consumption
+                  - Waste
+                  - Stock Adjustment
+                  - Expired Stock

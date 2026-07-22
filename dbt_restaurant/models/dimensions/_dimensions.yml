@@ -1,0 +1,80 @@
+version: 2
+
+models:
+  - name: dim_date
+    description: One row per business date in the simulation window.
+    columns:
+      - name: business_date
+        data_tests:
+          - unique
+          - not_null
+
+  - name: dim_menu_item
+    description: One row per menu item, with estimated food cost/margin joined in.
+    columns:
+      - name: menu_item_id
+        data_tests:
+          - unique
+          - not_null
+      - name: category
+        data_tests:
+          - accepted_values:
+              arguments:
+                values:
+                  - Starters
+                  - Dumplings
+                  - Rice Paper Rolls
+                  - Banh Mi
+                  - Pho Noodles
+                  - Pho Xao
+                  - Rice Bowls
+                  - Vermicelli Salad
+                  - Sharing Plates
+                  - Sides
+                  - Drinks
+
+  - name: dim_ingredient
+    description: One row per ingredient, with supplier attributes joined in.
+    columns:
+      - name: ingredient_id
+        data_tests:
+          - unique
+          - not_null
+      - name: supplier_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_supplier')
+                field: supplier_id
+
+  - name: dim_employee
+    description: One row per employee.
+    columns:
+      - name: employee_id
+        data_tests:
+          - unique
+          - not_null
+      - name: department
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["Kitchen", "Front of House"]
+
+  - name: dim_supplier
+    description: One row per supplier.
+    columns:
+      - name: supplier_id
+        data_tests:
+          - unique
+          - not_null
+
+  - name: dim_channel
+    description: One row per order channel, sourced from seeds/channel_reference.csv.
+    columns:
+      - name: channel
+        data_tests:
+          - unique
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["dine_in", "pickup", "uber_eats", "doordash"]

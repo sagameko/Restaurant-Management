@@ -1,0 +1,5 @@
+channel,channel_label,is_delivery_channel,commission_rate
+dine_in,Dine-In,false,0.00
+pickup,Pickup,false,0.00
+uber_eats,Uber Eats,true,0.28
+doordash,DoorDash,true,0.25
