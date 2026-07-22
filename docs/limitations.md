@@ -60,3 +60,20 @@ phase lands (currently: Phase 1-5).
   See `docs/data_dictionary.md` and the README disclaimer — a
   representative Vietnamese menu, not a reproduction of any live site's
   current offering.
+- **`dim_channel`'s commission rates are a hand-kept duplicate.** They're
+  sourced from a dbt seed (`seeds/channel_reference.csv`) rather than
+  derived from `config/simulation.yaml`, since dbt seeds can't read
+  Python config at build time. If `simulation.yaml`'s commission rates
+  ever change, this seed needs updating manually — see
+  `docs/architecture.md`.
+- **`mart_inventory_risk` is a single current-state snapshot,** not a
+  daily trend — closing stock, waste totals, and reorder alerts all
+  reflect the *end* of whatever date range was generated, not any
+  particular day within it. Combined with inventory never actually
+  stocking out (above), a "reorder alert" here just means closing stock
+  ended up below the reorder level, not that a stockout was ever close.
+- **Menu-engineering classification thresholds are median-based and
+  self-relative,** not benchmarked against real restaurant menu
+  engineering practice. An item is "High" popularity/profitability only
+  relative to this menu's own median — see `docs/business_rules.md` for
+  the exact definition.

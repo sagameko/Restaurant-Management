@@ -288,3 +288,20 @@ Running per-ingredient balance (`quantity_change` summed in
 `movement_timestamp` order) never goes negative — enforced by
 `restaurant_ops.validation.rules.validate_inventory_movements` and
 covered by `tests/unit/test_inventory.py`.
+
+## dbt layer (staging, intermediate, dimensions, facts, marts)
+
+This file documents the seed and raw CSV layers — the data before dbt
+touches it. Everything dbt builds from there (staging views through
+marts) is documented as model and column descriptions directly in
+`dbt_restaurant/models/**/*.yml` and `.sql` file headers, not duplicated
+here by hand. Browse it with:
+
+```bash
+uv run dbt docs generate --project-dir dbt_restaurant --profiles-dir dbt_restaurant
+uv run dbt docs serve --project-dir dbt_restaurant --profiles-dir dbt_restaurant
+```
+
+See `docs/architecture.md` for what each layer is responsible for and
+`docs/business_rules.md` for the SQL-level business logic (e.g. the
+menu-engineering classification thresholds).

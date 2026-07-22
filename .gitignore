@@ -24,6 +24,7 @@ dbt_restaurant/target/
 dbt_restaurant/dbt_packages/
 dbt_restaurant/logs/
 dbt_restaurant/profiles.yml
+dbt_restaurant/.user.yml
 
 # Streamlit
 .streamlit/secrets.toml

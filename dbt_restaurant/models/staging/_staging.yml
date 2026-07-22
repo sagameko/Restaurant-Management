@@ -1,0 +1,52 @@
+version: 2
+
+models:
+  - name: stg_menu_items
+    columns:
+      - name: menu_item_id
+        data_tests: [unique, not_null]
+
+  - name: stg_ingredients
+    columns:
+      - name: ingredient_id
+        data_tests: [unique, not_null]
+
+  - name: stg_suppliers
+    columns:
+      - name: supplier_id
+        data_tests: [unique, not_null]
+
+  - name: stg_employees
+    columns:
+      - name: employee_id
+        data_tests: [unique, not_null]
+
+  - name: stg_daily_context
+    columns:
+      - name: business_date
+        data_tests: [unique, not_null]
+
+  - name: stg_orders
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+
+  - name: stg_order_items
+    columns:
+      - name: order_item_id
+        data_tests: [unique, not_null]
+
+  - name: stg_reviews
+    columns:
+      - name: review_id
+        data_tests: [unique, not_null]
+
+  - name: stg_employee_shifts
+    columns:
+      - name: shift_id
+        data_tests: [unique, not_null]
+
+  - name: stg_inventory_movements
+    columns:
+      - name: movement_id
+        data_tests: [unique, not_null]

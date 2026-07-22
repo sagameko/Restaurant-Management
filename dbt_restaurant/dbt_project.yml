@@ -1,0 +1,32 @@
+name: "restaurant_ops"
+version: "1.0.0"
+config-version: 2
+
+profile: "restaurant_ops"
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+snapshot-paths: ["snapshots"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  restaurant_ops:
+    staging:
+      +materialized: view
+      +schema: staging
+    intermediate:
+      +materialized: view
+      +schema: intermediate
+    dimensions:
+      +materialized: table
+      +schema: main
+    facts:
+      +materialized: table
+      +schema: main
+    marts:
+      +materialized: table
+      +schema: marts

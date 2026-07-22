@@ -182,3 +182,50 @@ constant, compute the aggregate financial ratio it implies (here:
 labour % of revenue, food % of revenue, combined prime cost) and check
 it against a plausible real-world range — not just whether the
 per-record math is internally consistent.
+
+## 2026-07-22 (6)
+
+Problem:
+`marts.mart_channel_profitability.estimated_gross_profit` showed values
+like $1.67e8-$8.1e8 per channel — hundreds of millions of dollars, when
+the whole year's actual net sales across every channel totalled about
+$1.2M. The model also took 6.7 seconds to build, an outlier next to
+every other mart's ~0.2-0.4 seconds.
+
+Cause:
+The model joined `fact_orders` (order-grain, ~39k rows) and
+`fact_reviews` (review-grain, ~8k rows) directly to `dim_channel` in the
+same query, both on `channel`, then aggregated with `group by`. Neither
+join condition ties a specific order to a specific review, so for each
+channel dbt-duckdb computed every matching order row paired with every
+matching review row on that channel before the `group by` collapsed it
+— a cross-product fan-out, not a 1:1 or many:1 join. Every `sum()` over
+`orders.*` columns was inflated by a factor equal to that channel's
+review count (thousands), which is exactly why the numbers were roughly
+6 orders of magnitude too large, and why the query was slow (it was
+materializing millions of joined rows before aggregating).
+
+Resolution:
+Aggregated `fact_orders` and `fact_reviews` to channel grain in
+*separate* CTEs first (each producing one row per channel), then joined
+those two already-aggregated, 1-row-per-channel results together — a
+safe 1:1 join with no fan-out. Checked every other mart for the same
+pattern (join two un-aggregated fact-grain tables directly, then
+group-by): none of the others had it, because they either joined
+fact-grain data to genuinely-aggregated CTEs from the start, or joined
+on an actual foreign key (like `fact_reviews.order_id ->
+fact_orders.order_id` in `mart_review_analysis`, which is a real 1:1
+relationship, not a shared-category-style join).
+
+Lesson:
+Never join two tables directly on a non-unique shared attribute (like
+`channel`, `category`, `business_date`) when both sides have more than
+one row per value of that attribute — aggregate each side to that
+grain *first*, then join the aggregates. A join is only safe without
+pre-aggregating when at least one side is already unique on the join
+key (a real dimension, or a foreign-key relationship), or you accept
+the fan-out and want it (which is rare and should be explicit, e.g. via
+an intentional cross join). An unexpectedly slow model build is often a
+free warning sign of an unwanted fan-out before you even check the
+numbers — the row count blew out long before the wrong totals were
+visible.

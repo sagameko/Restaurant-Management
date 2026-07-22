@@ -25,10 +25,12 @@ estimated food-cost calculation per menu item; a full synthetic
 generation pipeline (daily weather/calendar context, employee shifts,
 orders, order items, customer reviews, and inventory movements) with
 demand, channel, kitchen-load, staffing/absence, and inventory-reorder
-relationships driven by `config/business_rules.yaml`. DuckDB + dbt
-transformations, the Streamlit dashboard and demand forecasting are still
-to come. See `docs/limitations.md` for what the synthetic data does and
-doesn't represent.
+relationships driven by `config/business_rules.yaml`; and a complete
+DuckDB + dbt transformation layer (staging → intermediate →
+dimensions/facts → 7 analytical marts, 98 passing dbt checks). The
+Streamlit dashboard and demand forecasting are still to come. See
+`docs/limitations.md` for what the synthetic data does and doesn't
+represent, and `docs/architecture.md` for how the pieces fit together.
 
 ## Setup
 
@@ -74,6 +76,23 @@ Writes `data/raw/daily_context.csv`, `employee_shifts.csv`, `orders.csv`,
 seed always reproduces the same dataset. See `docs/business_rules.md`
 for the demand/channel/staffing/inventory/review model, and
 `docs/data_dictionary.md` for the table schemas.
+
+## Loading into DuckDB and running dbt
+
+```bash
+uv run python scripts/load_raw_data.py
+cp dbt_restaurant/profiles.yml.example dbt_restaurant/profiles.yml  # first time only
+uv run dbt build --project-dir dbt_restaurant --profiles-dir dbt_restaurant
+```
+
+Always run dbt from the repository root with `--profiles-dir
+dbt_restaurant` — see `docs/architecture.md` for why. Browse the star
+schema and column-level docs with:
+
+```bash
+uv run dbt docs generate --project-dir dbt_restaurant --profiles-dir dbt_restaurant
+uv run dbt docs serve --project-dir dbt_restaurant --profiles-dir dbt_restaurant
+```
 
 ## Development
 
