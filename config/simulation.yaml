@@ -1,0 +1,29 @@
+restaurant:
+  name: "Lotus Street Kitchen"
+  location: "Melbourne"
+  seating_capacity: 70
+  opening_hour: 11
+  closing_hour: 21
+
+simulation:
+  start_date: "2025-07-01"
+  number_of_days: 365
+  random_seed: 42
+  average_daily_orders: 100
+
+channels:
+  dine_in:
+    probability: 0.40
+    commission_rate: 0.00
+
+  pickup:
+    probability: 0.25
+    commission_rate: 0.00
+
+  uber_eats:
+    probability: 0.23
+    commission_rate: 0.28
+
+  doordash:
+    probability: 0.12
+    commission_rate: 0.25

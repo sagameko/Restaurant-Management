@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.venv/
+
+# uv
+uv.lock.bak
+
+# Environment
+.env
+
+# Generated / local data
+data/raw/
+data/processed/
+data/sample/
+data/database/*.duckdb
+data/database/*.duckdb.wal
+
+# dbt
+dbt_restaurant/target/
+dbt_restaurant/dbt_packages/
+dbt_restaurant/logs/
+dbt_restaurant/profiles.yml
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Notebooks
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+
+# Local tooling / build-process artifacts (not part of the project itself)
+.claude/
+PROGRESS.md
+instruction.pdf

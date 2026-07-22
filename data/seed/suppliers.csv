@@ -1,0 +1,7 @@
+supplier_id,supplier_name,supplier_category,average_lead_time_days,reliability_score,synthetic_estimate
+S01,Mekong Fresh Produce,Produce & Herbs,1,0.94,true
+S02,Golden Ox Meats,Meat & Poultry,2,0.91,true
+S03,Pacific Seafood Co,Seafood,2,0.88,true
+S04,Saigon Pantry Supplies,Dry Goods & Pantry,3,0.95,true
+S05,Nguyen Bakery Wholesale,Bakery,1,0.97,true
+S06,Southern Cross Beverages,Beverages,2,0.93,true
