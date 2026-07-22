@@ -92,15 +92,26 @@ then renormalised. Delivery channels (`uber_eats`, `doordash`):
   more often than dine-in despite the longer promised window, per the
   spec's channel-relationship requirement.
 
-## Staffing / kitchen-load assumptions (Phase 3 placeholder)
+## Staffing / kitchen-load assumptions
 
-`kitchen_staff_count` and `front_of_house_staff_count` come from a fixed
-roster table keyed by (weekday vs weekend) x (lunch vs dinner) —
-`config/business_rules.yaml: kitchen_capacity.staff_roster` — **not**
-from real employee/shift data, since Phase 4 doesn't exist yet.
+Implemented in `restaurant_ops.generation.staffing.generate_shifts`
+(schedules real employees) and `restaurant_ops.generation.orders`
+(consumes the result). For each business date x daypart,
+`generate_shifts` tries to schedule a target headcount —
+`config/business_rules.yaml: kitchen_capacity.staff_roster`, keyed by
+(weekday vs weekend) x (lunch vs dinner) — by sampling without
+replacement from the active Kitchen/Front of House employees in
+`employees.csv`. Each scheduled employee independently has a chance
+(`staffing.absence_probability`, 4%) of being absent that shift
+(`actual_hours = 0`, `labour_cost = 0`, and they don't count toward
+effective staffing). `orders.py` receives the resulting *effective*
+(scheduled-minus-absent) headcount per (business date, daypart), not the
+target — that's what lets employee absence actually move
+`kitchen_load_ratio` day to day, per the spec's staffing-relationship
+requirement.
 
 ```
-estimated_kitchen_capacity = kitchen_staff_count x capacity_per_kitchen_staff_per_hour
+estimated_kitchen_capacity = effective_kitchen_staff_count x capacity_per_kitchen_staff_per_hour
 kitchen_load_ratio = orders_placed_in_the_same_hour / estimated_kitchen_capacity
 
 preparation_minutes
@@ -116,9 +127,78 @@ verified directionally in `tests/unit/test_order_generation.py` against
 the actual generated dataset, not just asserted structurally from the
 formula.
 
-**Revisit in Phase 4**: once `fact_employee_shifts` exists, replace the
-fixed roster with real scheduled/actual staff counts per shift, and
-recompute `kitchen_load_ratio`/`preparation_minutes` from that instead.
+**Why the roster looks small (2-3 people per shift) and
+`capacity_per_kitchen_staff_per_hour` looks high (9.0)**: these two
+constants were tuned together, not independently. An earlier pass sized
+the roster around "orders per hour" alone and left total labour cost as
+an afterthought — the result was a nonsensical 86% labour-cost-to-net-sales
+ratio (more than a real restaurant's entire revenue, once food cost is
+added in). Cutting headcount while raising per-person throughput
+proportionally keeps `kitchen_load_ratio` behaving the same way (capacity
+per shift is close to unchanged for several slots) while bringing labour
+cost down to ~35% of net sales — high by many countries' standards, but
+plausible for Australian hospitality wages (award rates + casual loading
+routinely put blended labour cost in the 30s here). See the
+2026-07-22 development-log entry for the numbers.
+
+## Inventory assumptions (Phase 5)
+
+Implemented in `restaurant_ops.generation.inventory`. One ledger per
+ingredient is simulated across the whole date range, in chronological
+order, tracking a running on-hand balance:
+
+```
+ingredient_consumption(business_date)
+= sum over fulfilled, non-cancelled order items that day of
+    order_item.quantity x recipe.quantity_required
+```
+
+Only `item_status = "Fulfilled"` lines on non-`Cancelled` orders draw
+down stock — a `"Missing"` item was never actually made, and a cancelled
+order's food never got made either.
+
+`recipes.estimated_wastage_pct` (the Phase 2 food-costing assumption)
+doubles as the *actual* waste-rate driver here: on a random subset of
+consumption days per ingredient (`inventory.waste_probability_per_consumption_day`),
+a `Waste` movement equal to roughly that day's consumption times the
+larger of a random fraction or the recipe's own wastage percentage is
+recorded — connecting the Phase 2 costing assumption to an actual Phase 5
+simulated outcome, not just a cost multiplier.
+
+**Reordering and emergency purchasing**: once on-hand drops below
+`ingredients.reorder_level`, a normal-lead-time delivery
+(`suppliers.average_lead_time_days`) is scheduled to arrive later,
+brought up to a target level (`inventory.reorder_target_days_of_cover`
+days of average consumption, or 2x the reorder level, whichever is
+higher). Separately — and this is what actually guarantees the ledger
+never goes negative — if a single day's consumption alone would exceed
+current on-hand stock, a same-day emergency delivery is triggered *before*
+that day's consumption is recorded, at a cost premium
+(`inventory.emergency_cost_multiplier`, 1.15x). This is the spec's
+"emergency purchasing" driver, made literal: a kitchen can't serve an
+ingredient it doesn't have, so the simulation makes sure it always has
+enough by the time it's needed, at a cost.
+
+**Expiry**: short-shelf-life ingredients expire more often — expiry
+probability per day is `inventory.expiry_base_probability_per_day` scaled
+by `expiry_reference_shelf_life_days / ingredient.shelf_life_days`, so an
+ingredient with a 5-day shelf life expires roughly 6x as often as the
+30-day reference point.
+
+**Stock adjustments**: a small weekly probability
+(`inventory.stock_adjustment_probability_per_week`) of a random +/-
+correction, representing stocktake variance.
+
+**Movement timestamps matter for validation**: within a business date,
+movements are timestamped in the order they're actually applied to the
+ledger — deliveries in the morning (hour 6-7), consumption at end of
+service (hour 20), then waste/expiry/adjustment after that (hours 21-23).
+`restaurant_ops.validation.rules.validate_inventory_movements` recomputes
+a running balance by sorting on `movement_timestamp`, so if a same-day
+delivery were stamped *after* that day's consumption instead of before,
+the recomputed balance would look negative even though the simulation
+itself never let on-hand go below zero — see the 2026-07-22 development-log
+entry for exactly this bug.
 
 ## Review-generation logic
 

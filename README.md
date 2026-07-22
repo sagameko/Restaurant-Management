@@ -20,10 +20,11 @@ with Bon Bon Boy and does not use confidential business information.
 ## Status
 
 Work in progress. Implemented so far: seed data (menu, ingredients,
-suppliers, recipes) with referential-integrity validation and estimated
-food-cost calculation per menu item; and a full synthetic order-generation
-pipeline (daily weather/calendar context, orders, order items, and
-customer reviews) with demand, channel, kitchen-load and review-rating
+suppliers, recipes, employees) with referential-integrity validation and
+estimated food-cost calculation per menu item; a full synthetic
+generation pipeline (daily weather/calendar context, employee shifts,
+orders, order items, customer reviews, and inventory movements) with
+demand, channel, kitchen-load, staffing/absence, and inventory-reorder
 relationships driven by `config/business_rules.yaml`. DuckDB + dbt
 transformations, the Streamlit dashboard and demand forecasting are still
 to come. See `docs/limitations.md` for what the synthetic data does and
@@ -39,11 +40,11 @@ uv run pytest
 ## Seed data
 
 `data/seed/` contains the manually maintained, relatively stable business
-entities: `menu_items.csv`, `ingredients.csv`, `suppliers.csv` and
-`recipes.csv`. All costs, suppliers and recipe quantities are synthetic
-estimates; menu item names/categories/prices are a representative,
-illustrative Vietnamese menu and are not scraped or copied from any live
-site.
+entities: `menu_items.csv`, `ingredients.csv`, `suppliers.csv`,
+`recipes.csv` and `employees.csv`. All costs, suppliers, recipe
+quantities and staff details are synthetic estimates; menu item
+names/categories/prices are a representative, illustrative Vietnamese
+menu and are not scraped or copied from any live site.
 
 Validate the seed data and print an estimated food-cost summary:
 
@@ -62,16 +63,17 @@ print(build_seed_report(menu_items, ingredients, recipes))
 "
 ```
 
-## Generating synthetic order data
+## Generating synthetic operational data
 
 ```bash
 uv run python scripts/generate_data.py --start-date 2025-07-01 --days 365 --average-orders 100 --seed 42
 ```
 
-Writes `data/raw/daily_context.csv`, `orders.csv`, `order_items.csv` and
-`reviews.csv`. The same seed always reproduces the same dataset. See
-`docs/business_rules.md` for the demand/channel/staffing/review model,
-and `docs/data_dictionary.md` for the table schemas.
+Writes `data/raw/daily_context.csv`, `employee_shifts.csv`, `orders.csv`,
+`order_items.csv`, `reviews.csv` and `inventory_movements.csv`. The same
+seed always reproduces the same dataset. See `docs/business_rules.md`
+for the demand/channel/staffing/inventory/review model, and
+`docs/data_dictionary.md` for the table schemas.
 
 ## Development
 

@@ -1,11 +1,12 @@
 """Pydantic schemas for the seed tables and the generated operational tables.
 
-Seed schemas (`MenuItem`, `Ingredient`, `Supplier`, `Recipe`) validate
-`data/seed/*.csv` on load and mirror the CSV columns one-to-one, so
-validation failures point directly at a source column.
+Seed schemas (`MenuItem`, `Ingredient`, `Supplier`, `Recipe`, `Employee`)
+validate `data/seed/*.csv` on load and mirror the CSV columns one-to-one,
+so validation failures point directly at a source column.
 
-Generated schemas (`DailyContext`, `Order`, `OrderItem`, `Review`)
-document the shape of the tables produced by `restaurant_ops.generation`.
+Generated schemas (`DailyContext`, `Order`, `OrderItem`, `Review`,
+`EmployeeShift`, `InventoryMovement`) document the shape of the tables
+produced by `restaurant_ops.generation`.
 Bulk validation of the (large) generated datasets uses the vectorised
 pandas checks in `restaurant_ops.validation.rules` rather than per-row
 Pydantic validation, for performance; these models are the source of
@@ -25,6 +26,11 @@ Channel = Literal["dine_in", "pickup", "uber_eats", "doordash"]
 Daypart = Literal["lunch", "dinner"]
 OrderStatus = Literal["Completed", "Cancelled", "Partially Refunded"]
 ItemStatus = Literal["Fulfilled", "Missing"]
+Department = Literal["Kitchen", "Front of House"]
+EmploymentType = Literal["Full-time", "Part-time", "Casual"]
+MovementType = Literal[
+    "Supplier Delivery", "Sales Consumption", "Waste", "Stock Adjustment", "Expired Stock"
+]
 
 
 class MenuItem(BaseModel):
@@ -138,3 +144,43 @@ class Review(BaseModel):
     review_text: str
     complaint_category: str | None = None
     response_required_flag: bool
+
+
+class Employee(BaseModel):
+    employee_id: str
+    employee_name: str
+    department: Department
+    role: str
+    employment_type: EmploymentType
+    hourly_rate: float = Field(gt=0)
+    standard_weekly_hours: float = Field(gt=0)
+    active: bool
+    synthetic_estimate: bool
+
+
+class EmployeeShift(BaseModel):
+    shift_id: str
+    employee_id: str
+    business_date: date
+    role: str
+    shift_start: datetime
+    shift_end: datetime
+    break_minutes: int = Field(ge=0)
+    scheduled_hours: float = Field(gt=0)
+    actual_hours: float = Field(ge=0)
+    absence_flag: bool
+    hourly_rate: float = Field(gt=0)
+    labour_cost: float = Field(ge=0)
+
+
+class InventoryMovement(BaseModel):
+    movement_id: str
+    movement_timestamp: datetime
+    business_date: date
+    ingredient_id: str
+    movement_type: MovementType
+    quantity_change: float
+    unit: Unit
+    unit_cost: float = Field(ge=0)
+    movement_value: float
+    reference_id: str

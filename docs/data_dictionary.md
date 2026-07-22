@@ -103,14 +103,37 @@ references a real menu item and ingredient — enforced by
 `restaurant_ops.ingestion.loader.validate_referential_integrity` and
 covered by `tests/unit/test_recipe_costs.py`.
 
-## Generated tables (`data/raw/`, Phase 3)
+### `employees.csv`
+
+- **Purpose**: the staff roster `restaurant_ops.generation.staffing`
+  schedules real shifts against.
+- **Grain**: one row per employee.
+- **Primary key**: `employee_id`.
+- **Foreign keys**: none.
+- **Synthetic/public-source status**: entirely synthetic — names, roles
+  and rates are all fictional/illustrative.
+
+| Column | Description |
+|---|---|
+| `employee_id` | Unique employee identifier, e.g. `E07`. |
+| `employee_name` | Synthetic name. |
+| `department` | `Kitchen` or `Front of House`. |
+| `role` | e.g. Head Chef, Line Cook, Waiter, Barista. |
+| `employment_type` | `Full-time`, `Part-time`, or `Casual`. |
+| `hourly_rate` | Synthetic AUD hourly rate. |
+| `standard_weekly_hours` | Typical contracted/expected weekly hours (informational; actual scheduling comes from shifts). |
+| `active` | Whether this employee is currently eligible to be scheduled. |
+| `synthetic_estimate` | Always `true`. |
+
+## Generated tables (`data/raw/`, Phases 3-5)
 
 Produced by `restaurant_ops.generation` (via `scripts/generate_data.py`)
 from the seed tables above plus `config/simulation.yaml` and
 `config/business_rules.yaml`. Reproducible from a seed: the same
 `--seed` always produces byte-identical output (single
 `numpy.random.Generator`, seeded once, threaded through every generator
-function in a fixed call order). All of it is synthetic.
+function in a fixed call order: daily context -> shifts -> orders/order
+items -> reviews -> inventory movements). All of it is synthetic.
 
 ### `daily_context.csv`
 
@@ -211,3 +234,57 @@ function in a fixed call order). All of it is synthetic.
 | `review_text` | A template selected by rating band. |
 | `complaint_category` | `"Missing Item"`, `"Late Order"`, a random category for other low ratings, or null. |
 | `response_required_flag` | True if `rating <= 2` or a complaint category was assigned. |
+
+### `employee_shifts.csv`
+
+- **Purpose**: real scheduled shifts (including absences) — the source
+  of the effective staffing that drives `orders.kitchen_load_ratio`.
+- **Grain**: one row per scheduled shift.
+- **Primary key**: `shift_id`.
+- **Foreign keys**: `employee_id` -> `employees.employee_id`.
+- **Synthetic/public-source status**: entirely synthetic. Note: this
+  table intentionally has no `daypart` column (matching the spec's exact
+  required columns) — `restaurant_ops.generation.staffing.generate_shifts`
+  returns a separate `(business_date, daypart) -> (kitchen_count,
+  front_of_house_count)` lookup alongside it for `orders.py` to consume.
+
+| Column | Description |
+|---|---|
+| `shift_id` | Unique shift identifier, e.g. `SFT001234`. |
+| `employee_id` | The scheduled employee. |
+| `business_date` | The date of the shift. |
+| `role` | Copied from the employee record at schedule time. |
+| `shift_start` / `shift_end` | Includes a prep buffer before daypart service hours (see `docs/business_rules.md`). |
+| `break_minutes` | Non-zero only for shifts longer than `staffing.break_minutes_threshold_hours`. |
+| `scheduled_hours` | `shift_end - shift_start`, in hours. |
+| `actual_hours` | `0` if `absence_flag` is true; otherwise scheduled hours minus break, plus small random variance. |
+| `absence_flag` | Whether this employee didn't show up for the shift. |
+| `hourly_rate` | Copied from the employee record. |
+| `labour_cost` | `actual_hours x hourly_rate`. |
+
+### `inventory_movements.csv`
+
+- **Purpose**: a full stock ledger per ingredient — deliveries,
+  consumption, waste, expiry, and stocktake adjustments.
+- **Grain**: one row per movement event.
+- **Primary key**: `movement_id`.
+- **Foreign keys**: `ingredient_id` -> `ingredients.ingredient_id`.
+- **Synthetic/public-source status**: entirely synthetic.
+
+| Column | Description |
+|---|---|
+| `movement_id` | Unique movement identifier, e.g. `MOV0012345`. |
+| `movement_timestamp` | When this movement was applied — see `docs/business_rules.md` for why intra-day ordering matters here. |
+| `business_date` | Calendar date of the movement. |
+| `ingredient_id` | The ingredient affected. |
+| `movement_type` | `Supplier Delivery`, `Sales Consumption`, `Waste`, `Stock Adjustment`, or `Expired Stock`. |
+| `quantity_change` | Positive for deliveries and upward stock adjustments; negative for consumption, waste, expiry, and downward adjustments. |
+| `unit` | Matches `ingredients.unit`. |
+| `unit_cost` | Normally `ingredients.estimated_unit_cost`; inflated by `inventory.emergency_cost_multiplier` on same-day emergency deliveries. |
+| `movement_value` | `quantity_change x unit_cost`. |
+| `reference_id` | A delivery/adjustment/expiry ID, the business date (for daily-aggregated consumption/waste), or `"INIT-STOCKTAKE"` for each ingredient's opening balance. |
+
+Running per-ingredient balance (`quantity_change` summed in
+`movement_timestamp` order) never goes negative — enforced by
+`restaurant_ops.validation.rules.validate_inventory_movements` and
+covered by `tests/unit/test_inventory.py`.

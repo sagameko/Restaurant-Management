@@ -13,8 +13,14 @@ from pandas.testing import assert_frame_equal
 
 from restaurant_ops.config import get_business_rules, get_simulation_settings
 from restaurant_ops.generation.orders import generate_orders_and_items
+from restaurant_ops.generation.staffing import generate_shifts
 from restaurant_ops.generation.weather import generate_daily_context
-from restaurant_ops.ingestion.loader import load_ingredients, load_menu_items, load_recipes
+from restaurant_ops.ingestion.loader import (
+    load_employees,
+    load_ingredients,
+    load_menu_items,
+    load_recipes,
+)
 from restaurant_ops.validation.rules import validate_order_items, validate_orders
 
 _START_DATE = date(2025, 7, 1)
@@ -29,8 +35,10 @@ def _generate(seed: int = _SEED) -> tuple[pd.DataFrame, pd.DataFrame]:
     menu_items = load_menu_items()
     ingredients = load_ingredients()
     recipes = load_recipes()
+    employees = load_employees()
     rng = np.random.default_rng(seed)
     daily_context = generate_daily_context(_START_DATE, _DAYS, business_rules, rng)
+    _shifts, staffing_lookup = generate_shifts(daily_context, employees, business_rules, rng)
     return generate_orders_and_items(
         daily_context,
         menu_items,
@@ -39,6 +47,7 @@ def _generate(seed: int = _SEED) -> tuple[pd.DataFrame, pd.DataFrame]:
         simulation_settings,
         business_rules,
         rng,
+        staffing_lookup,
         average_daily_orders=_AVERAGE_ORDERS,
     )
 

@@ -1,0 +1,23 @@
+employee_id,employee_name,department,role,employment_type,hourly_rate,standard_weekly_hours,active,synthetic_estimate
+E01,Minh Tran,Kitchen,Head Chef,Full-time,38.00,38,true,true
+E02,Lien Pham,Kitchen,Sous Chef,Full-time,32.00,38,true,true
+E03,Duc Nguyen,Kitchen,Sous Chef,Full-time,32.00,38,true,true
+E04,Anh Vo,Kitchen,Line Cook,Part-time,27.00,25,true,true
+E05,Bao Le,Kitchen,Line Cook,Part-time,27.00,25,true,true
+E06,Chi Hoang,Kitchen,Line Cook,Casual,27.50,18,true,true
+E07,Khoa Dang,Kitchen,Line Cook,Casual,27.50,18,true,true
+E08,My Bui,Kitchen,Line Cook,Casual,27.50,15,true,true
+E09,Phuc Truong,Kitchen,Kitchen Hand,Casual,24.00,15,true,true
+E10,Trang Doan,Kitchen,Kitchen Hand,Casual,24.00,15,true,true
+E11,Hai Vuong,Front of House,Restaurant Manager,Full-time,34.00,38,true,true
+E12,Ngoc Phan,Front of House,Shift Supervisor,Full-time,29.00,38,true,true
+E13,Quang Ha,Front of House,Shift Supervisor,Part-time,29.00,25,true,true
+E14,Thao Dinh,Front of House,Waiter,Part-time,25.00,22,true,true
+E15,Vy Luong,Front of House,Waiter,Part-time,25.00,22,true,true
+E16,Son Mai,Front of House,Waiter,Casual,25.50,18,true,true
+E17,Yen Ta,Front of House,Waiter,Casual,25.50,18,true,true
+E18,Long Chau,Front of House,Waiter,Casual,25.50,15,true,true
+E19,Kim Ngo,Front of House,Waiter,Casual,25.50,15,true,true
+E20,Tuan Vu,Front of House,Waiter,Casual,25.50,12,true,true
+E21,Huyen Trinh,Front of House,Barista,Part-time,26.00,20,true,true
+E22,Nam Cao,Front of House,Barista,Casual,26.50,15,true,true

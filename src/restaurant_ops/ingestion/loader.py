@@ -1,9 +1,9 @@
-"""Load, validate and cost the manually maintained seed tables.
-
-This is the first working vertical slice of the platform: read
-`menu_items.csv`, `ingredients.csv`, `suppliers.csv` and `recipes.csv`,
-confirm every recipe references a real menu item and ingredient, and
-calculate each menu item's estimated food cost from its recipe.
+"""Load, validate and cost the manually maintained seed tables:
+`menu_items.csv`, `ingredients.csv`, `suppliers.csv`, `recipes.csv` and
+`employees.csv`. `validate_referential_integrity` and the food-cost
+calculations only concern the menu/ingredient/supplier/recipe network —
+`employees.csv` has no foreign keys of its own (shifts reference it, not
+the other way around).
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from pathlib import Path
 import pandas as pd
 
 from restaurant_ops.config import SEED_DIR
-from restaurant_ops.ingestion.schemas import Ingredient, MenuItem, Recipe, Supplier
+from restaurant_ops.ingestion.schemas import Employee, Ingredient, MenuItem, Recipe, Supplier
 
 
 def _read_seed_csv(path: Path) -> list[dict]:
@@ -44,6 +44,11 @@ def load_suppliers(path: Path | None = None) -> list[Supplier]:
 def load_recipes(path: Path | None = None) -> list[Recipe]:
     rows = _read_seed_csv(path or SEED_DIR / "recipes.csv")
     return [Recipe.model_validate(row) for row in rows]
+
+
+def load_employees(path: Path | None = None) -> list[Employee]:
+    rows = _read_seed_csv(path or SEED_DIR / "employees.csv")
+    return [Employee.model_validate(row) for row in rows]
 
 
 def validate_referential_integrity(
