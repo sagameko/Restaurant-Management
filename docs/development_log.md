@@ -229,3 +229,37 @@ an intentional cross join). An unexpectedly slow model build is often a
 free warning sign of an unwanted fan-out before you even check the
 numbers — the row count blew out long before the wrong totals were
 visible.
+
+## 2026-07-22 (7)
+
+Problem:
+The first real GitHub Actions run of CI failed all three
+`tests/integration/test_pipeline.py` tests with `Could not find profile
+named 'restaurant_ops'`, even though the exact same test suite passed
+locally and `dbt build` had been verified working directly moments
+before pushing.
+
+Cause:
+`.github/workflows/ci.yml`'s "Configure dbt profile" step (which copies
+`profiles.yml.example` to the gitignored `profiles.yml`) was ordered
+*after* "Run tests" — but the integration test's `pipeline_result`
+fixture invokes `dbt build` as a subprocess, which needs that file to
+exist. On a fresh CI checkout there's no `profiles.yml` yet at that
+point. This never reproduced locally because `dbt_restaurant/profiles.yml`
+had already existed on disk since the profile-setup step earlier in
+this same session — a stale local file masking a real ordering bug in
+the checked-in workflow.
+
+Resolution:
+Moved "Configure dbt profile" to immediately after `uv sync`, before
+lint and tests. Verified by actually deleting the local
+`profiles.yml` and `restaurant.duckdb` and re-running the full sequence
+in the corrected order, rather than trusting the YAML reordering alone.
+
+Lesson:
+A locally-passing test suite doesn't prove a workflow's *step order* is
+correct if local state (a file created once, days of iteration ago) can
+silently substitute for a step CI is supposed to perform. When a test
+depends on setup a CI step is responsible for, verify by actually
+removing that local state and re-running — don't just re-read the YAML
+and reason about it.
