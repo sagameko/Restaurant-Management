@@ -6,11 +6,11 @@ channel mix, delivery commission and longer promised windows, and a
 kitchen-load model where preparation time, missing-item probability and
 refund probability all rise as the kitchen gets busier.
 
-Kitchen/front-of-house staff counts are a fixed roster estimate by
-daypart and weekday-type (`config/business_rules.yaml: kitchen_capacity`)
-rather than being derived from real shifts, since Phase 4 (employees and
-shifts) has not been implemented yet. `kitchen_load_ratio` and
-`preparation_minutes` will need recomputing once real shift data exists.
+Kitchen/front-of-house staff counts come from real, generated shifts
+(`restaurant_ops.generation.staffing.generate_shifts`'s effective-staffing
+lookup — scheduled minus absent, per business date and daypart), not a
+fixed placeholder — that's what lets employee absence actually move
+`kitchen_load_ratio`.
 """
 
 from __future__ import annotations
@@ -25,12 +25,6 @@ from restaurant_ops.ingestion.loader import compute_menu_item_food_costs
 from restaurant_ops.ingestion.schemas import Ingredient, MenuItem, Recipe
 
 _DELIVERY_CHANNELS = {"uber_eats", "doordash"}
-
-
-def _staff_roster(weekend_flag: bool, daypart: str, business_rules: dict) -> tuple[int, int]:
-    category = "weekend" if weekend_flag else "weekday"
-    roster = business_rules["kitchen_capacity"]["staff_roster"][category][daypart]
-    return roster["kitchen"], roster["front_of_house"]
 
 
 def _promotion_lookup(business_rules: dict) -> dict[str, dict]:
@@ -203,6 +197,7 @@ def generate_orders_and_items(
     simulation_settings: SimulationSettings,
     business_rules: dict,
     rng: np.random.Generator,
+    staffing_lookup: dict[tuple[date, str], tuple[int, int]],
     average_daily_orders: int | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Generate the Orders and Order items tables for the whole simulation window."""
@@ -244,7 +239,7 @@ def generate_orders_and_items(
             if order_count == 0:
                 continue
 
-            kitchen_staff, foh_staff = _staff_roster(weekend_flag, daypart, business_rules)
+            kitchen_staff, foh_staff = staffing_lookup[(business_date, daypart)]
             estimated_capacity = kitchen_staff * capacity_per_staff_hour
             channels, channel_probs = _channel_probabilities(
                 daypart, simulation_settings, business_rules

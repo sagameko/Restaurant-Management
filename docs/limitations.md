@@ -1,7 +1,7 @@
 # Limitations
 
 Honest caveats about what this dataset is and isn't, updated as each
-phase lands (currently: Phase 1-3).
+phase lands (currently: Phase 1-5).
 
 - **Synthetic data cannot validate actual business performance.** Every
   number in this project — costs, margins, demand patterns, ratings — is
@@ -22,13 +22,29 @@ phase lands (currently: Phase 1-3).
   Public holiday dates are the exception: those are computed from the
   actual Victorian public holiday rules, since they're calendar facts,
   not weather.
-- **Kitchen/front-of-house staffing is a Phase 3 placeholder.**
-  `orders.kitchen_staff_count`, `front_of_house_staff_count` and
-  therefore `kitchen_load_ratio` and `preparation_minutes` come from a
-  fixed roster table by daypart/weekday-type
-  (`config/business_rules.yaml: kitchen_capacity.staff_roster`), not
-  from real employee shifts — because employee/shift generation (Phase 4)
-  doesn't exist yet. These will need recomputing once it does.
+- **Staffing is scheduled against a fixed target roster, not real
+  labour-demand forecasting.** `employees.csv` is generated, and shifts
+  are real (including random absences that move `kitchen_load_ratio`),
+  but the *target* headcount per shift
+  (`config/business_rules.yaml: kitchen_capacity.staff_roster`) is a
+  small number of hand-tuned constants, not the output of a rostering
+  algorithm reacting to forecast demand.
+- **Employees never call in sick for a reason, take leave, or have shift
+  preferences.** Absence is a flat 4% independent probability per
+  scheduled shift (`staffing.absence_probability`) — there's no
+  correlation with day of week, weather, or a specific employee being
+  less reliable than another.
+- **Inventory never actually stocks out.** The reorder + same-day
+  emergency-purchasing logic (`docs/business_rules.md`) guarantees the
+  simulated ledger never goes negative — in reality, restaurants
+  sometimes do run out of an ingredient and have to pull a dish from the
+  menu until the next delivery. This dataset doesn't model that failure
+  mode; it models a kitchen that always
+  manages to source what it needs, at a cost premium when it's urgent.
+- **Waste and expiry rates are illustrative,** not modelled from any
+  particular ingredient's real spoilage behaviour beyond using
+  `shelf_life_days` as a relative signal (shorter shelf life -> expires
+  more often).
 - **Customer reviews are generated templates.** `reviews.review_text` is
   selected from a small set of hand-written sentences keyed by rating
   band, not scraped or adapted from real reviews. `reviews.rating` is

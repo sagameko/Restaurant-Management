@@ -99,17 +99,53 @@ weather_model:
   rain_mm_scale: 4.0
 
 kitchen_capacity:
-  capacity_per_kitchen_staff_per_hour: 4.5
-  # Phase 3 placeholder: a fixed roster estimate by daypart/weekday-type,
-  # since Phase 4 (employees/shifts) does not exist yet. Replace with
-  # shift-derived staff counts once fact_employee_shifts exists.
+  # Orders one kitchen staff member can handle per hour. Deliberately
+  # higher than a naive "one ticket at a time" estimate: this menu has a
+  # lot of quick items (banh mi, rice paper rolls, drinks) alongside
+  # slower ones, and it's set jointly with staff_roster below to land on
+  # a realistic labour-cost percentage (see docs/business_rules.md) while
+  # still preserving meaningful lunch/dinner and weekday/weekend
+  # kitchen_load_ratio variation.
+  capacity_per_kitchen_staff_per_hour: 9.0
+  # Target roster by daypart/weekday-type: how many Kitchen/Front of House
+  # employees restaurant_ops.generation.staffing tries to schedule for
+  # each shift. Actual kitchen_load_ratio in orders.py comes from real
+  # scheduled-minus-absent shift counts (fact_employee_shifts), not this
+  # target directly — absences mean the effective count on a given day
+  # can fall short of it, which is the point (spec: "preparation time
+  # should depend on ... employee absence").
   staff_roster:
     weekday:
-      lunch: {kitchen: 3, front_of_house: 4}
-      dinner: {kitchen: 4, front_of_house: 6}
+      lunch: {kitchen: 2, front_of_house: 2}
+      dinner: {kitchen: 2, front_of_house: 2}
     weekend:
-      lunch: {kitchen: 4, front_of_house: 5}
-      dinner: {kitchen: 5, front_of_house: 7}
+      lunch: {kitchen: 2, front_of_house: 2}
+      dinner: {kitchen: 3, front_of_house: 3}
+
+staffing:
+  # Extra time scheduled either side of daypart service hours for prep;
+  # asymmetric on purpose — service naturally winds down before closing,
+  # so there's no separate paid cleanup block.
+  shift_buffer_before_hours: 0.25
+  shift_buffer_after_hours: 0.0
+  break_minutes_threshold_hours: 5.0
+  break_minutes: 30
+  absence_probability: 0.04
+  actual_hours_variance_std_hours: 0.15
+
+inventory:
+  initial_stock_days_of_cover: 4
+  reorder_target_days_of_cover: 5
+  # Applied to unit_cost on same-day emergency deliveries only — a rush
+  # order costs a premium over the supplier's normal price.
+  emergency_cost_multiplier: 1.15
+  waste_probability_per_consumption_day: 0.5
+  waste_fraction_of_daily_consumption_range: [0.02, 0.15]
+  expiry_reference_shelf_life_days: 30
+  expiry_base_probability_per_day: 0.01
+  expiry_fraction_of_on_hand_range: [0.03, 0.12]
+  stock_adjustment_probability_per_week: 0.02
+  stock_adjustment_fraction_range: [-0.05, 0.05]
 
 service:
   load_penalty_prep_slope: 1.0

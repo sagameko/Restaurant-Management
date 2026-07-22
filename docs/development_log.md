@@ -103,3 +103,82 @@ practice." After building a generator with explicit required
 relationships (spec section 12), actually query the generated data
 grouped by the relevant dimension (load bucket, channel) and check the
 direction and magnitude, not just that it ran without errors.
+
+## 2026-07-22 (4)
+
+Problem:
+`restaurant_ops.validation.rules.validate_inventory_movements` reported
+7 rows where the recomputed running inventory balance went negative, on
+an ingredient that never actually ran out during the simulation itself
+(`_IngredientLedger.apply` floors `on_hand` at 0 internally, so it never
+went negative in the generator's own state).
+
+Cause:
+Within a business date, `generate_inventory_movements` correctly applies
+a pending delivery *before* that day's consumption in the simulation
+loop — but the delivery's movement row was timestamped `hour=7` while
+consumption defaulted to `hour=6`. The validator recomputes the running
+balance by sorting on `movement_timestamp`, so it saw that day's
+consumption at an *earlier* timestamp than the delivery that (in
+reality, per the simulation's own processing order) arrived first —
+making a perfectly fine ledger look like it went negative.
+
+Resolution:
+Made every movement type's hour-of-day explicit and consistent with true
+processing order: `Stock Adjustment` (initial stocktake) at hour 0,
+`Supplier Delivery` (scheduled and emergency) at hours 6-7, `Sales
+Consumption` at hour 20, `Waste` at hour 21, `Expired Stock` at hour 22,
+`Stock Adjustment` (stocktake correction) at hour 23. Removed the
+function's `hour: int = 6` default so every call site has to state its
+hour explicitly, rather than silently inheriting a default that happened
+to be wrong for most call sites.
+
+Lesson:
+When a validator recomputes state by sorting on a timestamp column,
+that column has to reflect true causal order, not just "same calendar
+day." A daily-aggregated movement (consumption) and an early-morning
+event (delivery) landing on the same `business_date` isn't enough — get
+the hour-of-day right too, or a correct simulation will look broken to
+anything that re-derives state from the recorded events instead of
+trusting the generator's internal (correct) bookkeeping.
+
+## 2026-07-22 (5)
+
+Problem:
+After Phase 4 added real employee shifts, the first full-year run showed
+`total labour_cost / total net_sales = 86%` — combined with the existing
+~14.5% food cost, that's over 100% of revenue on food and labour alone,
+before rent, utilities, or any profit. Not "high," impossible.
+
+Cause:
+`kitchen_capacity.staff_roster` (2-7 people per shift, existing since
+Phase 3) was originally sized only to keep `kitchen_load_ratio` behaving
+realistically (mostly under 1.0 with periodic peaks above it) — nobody
+had checked what that roster, multiplied by realistic Australian
+hospitality hourly rates and shift lengths, implied for total labour
+cost against this menu's actual revenue per order. It implied roughly
+100 labour-hours/day for a restaurant doing ~$3,250/day in net sales.
+
+Resolution:
+Retuned `kitchen_capacity.capacity_per_kitchen_staff_per_hour` from 4.5
+to 9.0 (a "more efficient kitchen" assumption) and cut the roster
+roughly in half (e.g. weekday dinner kitchen 4->2, front-of-house 6->2),
+choosing the new roster x new capacity products to land close to the old
+per-slot capacity for several slots (weekday dinner: 2x9=18 vs old
+4x4.5=18, unchanged) so `kitchen_load_ratio`'s distribution wouldn't be
+disrupted. Also cut shift buffer time from 1 hour (0.5 before + 0.5
+after) to 15 minutes (0.25 before, 0 after). Re-ran and confirmed:
+labour cost fell to 34.7% of net sales (a realistic, if high-end,
+figure for Australian hospitality), while the load-driven relationships
+(prep time 17.6->43min, missing-items 2.0%->8.4%, refunds 4.1%->13.8%
+across load buckets) stayed intact and clearly directional.
+
+Lesson:
+A generator constant that's tuned in isolation for one relationship
+(kitchen_load_ratio's realism) can silently break an entirely different
+one (labour cost as a percentage of revenue) if nobody cross-checks the
+implied real-world total. After tuning any cost- or capacity-related
+constant, compute the aggregate financial ratio it implies (here:
+labour % of revenue, food % of revenue, combined prime cost) and check
+it against a plausible real-world range — not just whether the
+per-record math is internally consistent.
