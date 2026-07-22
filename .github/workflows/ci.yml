@@ -22,6 +22,9 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
+      - name: Configure dbt profile
+        run: cp dbt_restaurant/profiles.yml.example dbt_restaurant/profiles.yml
+
       - name: Lint
         run: |
           uv run ruff check .
@@ -35,9 +38,6 @@ jobs:
 
       - name: Load the test dataset into DuckDB
         run: uv run python scripts/load_raw_data.py
-
-      - name: Configure dbt profile
-        run: cp dbt_restaurant/profiles.yml.example dbt_restaurant/profiles.yml
 
       - name: Run dbt build
         run: uv run dbt build --project-dir dbt_restaurant --profiles-dir dbt_restaurant
