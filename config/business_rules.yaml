@@ -1,0 +1,168 @@
+# Tunable constants for synthetic order/review generation (Phase 3).
+# Keeping these out of code lets the demand/staffing/review model be
+# retuned without touching restaurant_ops.generation.
+
+dayparts:
+  lunch:
+    start_hour: 11
+    end_hour: 15
+    peak_hour: 12.5
+  dinner:
+    start_hour: 15
+    end_hour: 21
+    peak_hour: 19.0
+
+demand:
+  weekday_multipliers:
+    monday: 0.85
+    tuesday: 0.85
+    wednesday: 0.90
+    thursday: 0.95
+    friday: 1.15
+    saturday: 1.25
+    sunday: 1.05
+  daypart_share:
+    dinner_base: 0.58
+    weekend_dinner_boost: 0.05
+  weather:
+    cold_threshold_c: 15.0
+    hot_threshold_c: 28.0
+    cold_day_volume_multiplier: 1.05
+    hot_day_volume_multiplier: 1.03
+  public_holiday_volume_multiplier: 1.10
+  city_event_volume_multiplier: 1.15
+  items_per_order_weights:
+    1: 0.30
+    2: 0.35
+    3: 0.20
+    4: 0.10
+    5: 0.05
+  repeat_item_probability: 0.15
+
+channels:
+  daypart_multipliers:
+    lunch:
+      dine_in: 0.90
+      pickup: 1.30
+      uber_eats: 0.90
+      doordash: 0.90
+    dinner:
+      dine_in: 1.05
+      pickup: 0.85
+      uber_eats: 1.15
+      doordash: 1.15
+  # Promised time from order to being served/ready/delivered. Delivery
+  # channels are deliberately generous on kitchen time alone, because
+  # their promise also has to cover the courier pickup + transit leg
+  # (see service.delivery_transit_minutes_*) — that's what makes
+  # delivery late more often despite the longer promised window, per
+  # the spec's "delivery platforms show a higher probability of late
+  # complaints" requirement.
+  promised_minutes:
+    dine_in: 24
+    pickup: 23
+    uber_eats: 38
+    doordash: 38
+
+promotions:
+  redemption_rate: 0.75
+  schedule:
+    - name: "Banh Mi Monday"
+      weekday: monday
+      discount_pct: 0.15
+      volume_multiplier: 1.20
+    - name: "Weekend Sharing Special"
+      weekday: saturday
+      discount_pct: 0.10
+      volume_multiplier: 1.10
+
+# Fictional recurring city events (not real Melbourne events), used only
+# as a synthetic demand driver per the project spec.
+city_events:
+  - name: "Lotus Street Night Market"
+    month: 3
+    day: 14
+  - name: "Docklands Street Food Festival"
+    month: 11
+    day: 8
+
+weather_model:
+  mean_temperature_c: 18.0
+  amplitude_c: 7.5
+  peak_day_of_year: 30
+  daily_noise_std_c: 3.0
+  winter_months: [6, 7, 8]
+  summer_months: [12, 1, 2]
+  winter_rain_probability: 0.40
+  summer_rain_probability: 0.18
+  shoulder_rain_probability: 0.28
+  rain_mm_scale: 4.0
+
+kitchen_capacity:
+  capacity_per_kitchen_staff_per_hour: 4.5
+  # Phase 3 placeholder: a fixed roster estimate by daypart/weekday-type,
+  # since Phase 4 (employees/shifts) does not exist yet. Replace with
+  # shift-derived staff counts once fact_employee_shifts exists.
+  staff_roster:
+    weekday:
+      lunch: {kitchen: 3, front_of_house: 4}
+      dinner: {kitchen: 4, front_of_house: 6}
+    weekend:
+      lunch: {kitchen: 4, front_of_house: 5}
+      dinner: {kitchen: 5, front_of_house: 7}
+
+service:
+  load_penalty_prep_slope: 1.0
+  prep_time_noise_std_minutes: 1.2
+  min_preparation_minutes: 3.0
+  # Notional courier pickup + transit time, applied only when deciding
+  # whether a delivery order is late (kitchen prep alone is what's
+  # stored in preparation_minutes; the transit leg isn't a separate
+  # persisted column, since it never happens for dine_in/pickup).
+  delivery_transit_minutes_mean: 14.0
+  delivery_transit_minutes_std: 5.0
+  base_missing_item_prob: 0.02
+  missing_item_load_slope: 0.04
+  base_cancelled_prob: 0.012
+  base_partial_refund_prob: 0.02
+  refund_load_slope: 0.05
+  missing_item_refund_boost: 0.05
+  late_order_refund_boost: 0.03
+  partial_refund_fraction_range: [0.10, 0.60]
+  special_request_probability: 0.08
+  special_requests:
+    - "no coriander"
+    - "extra spicy"
+    - "no peanuts"
+    - "no chilli"
+    - "sauce on the side"
+    - "extra fish sauce"
+
+reviews:
+  probability_by_channel:
+    dine_in: 0.12
+    pickup: 0.15
+    uber_eats: 0.35
+    doordash: 0.35
+  base_rating: 4.8
+  late_penalty: 0.8
+  missing_item_penalty: 1.5
+  severe_delay_penalty: 0.5
+  severe_delay_extra_minutes: 10
+  noise_std: 0.35
+  review_date_offset_days: [0, 4]
+  templates:
+    positive:
+      - "Amazing pho, will definitely order again!"
+      - "Best banh mi in the area, fast and friendly service."
+      - "Loved the fresh rice paper rolls, great value."
+      - "Great flavours and quick delivery, highly recommend."
+    neutral:
+      - "Food was decent but nothing special."
+      - "Order was okay, a bit slower than expected."
+      - "Average experience overall, might try again."
+    negative:
+      - "Order took way too long to arrive."
+      - "Missing an item from my order, disappointing."
+      - "Food arrived cold and the portion was small."
+      - "Not happy with the wait time tonight."

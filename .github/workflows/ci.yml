@@ -29,3 +29,6 @@ jobs:
 
       - name: Run tests
         run: uv run pytest
+
+      - name: Generate a small test dataset
+        run: uv run python scripts/generate_data.py --start-date 2025-07-01 --days 14 --average-orders 20 --seed 42
