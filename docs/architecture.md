@@ -1,7 +1,6 @@
 # Architecture
 
-Covers the data platform through Phase 6 (DuckDB + dbt). The Streamlit
-application (Phase 7) will get its own section here once it exists.
+Covers the data platform through Phase 7 (DuckDB + dbt + Streamlit).
 
 ## Data flow
 
@@ -37,7 +36,7 @@ scripts/generate_data.py                            ▼
                                               mart_review_analysis
                                                      │
                                                      ▼
-                                        Streamlit application (Phase 7)
+                                        Streamlit application (`app/`)
 ```
 
 Two independent producers feed the raw layer: `data/seed/*.csv` is
@@ -116,3 +115,39 @@ testing, and documentation generation that dbt already provides.
   with `config/simulation.yaml`'s channel commission rates — a small,
   deliberate duplication documented here so it doesn't go stale
   silently.
+
+## Streamlit application (`app/`)
+
+`app/Home.py` is the entrypoint (`uv run streamlit run app/Home.py`);
+`app/pages/1_Executive_Overview.py` through `7_Customer_Experience.py`
+are auto-discovered by Streamlit's multipage convention. `app/components/`
+holds everything shared across pages: `database.py` (a cached read-only
+DuckDB connection plus query functions), `filters.py` (sidebar filter
+widgets and formatting helpers), `charts.py` (Plotly styling/palette),
+and `insights.py` (pure, UI-free functions that generate the short
+natural-language summaries on Page 1).
+
+Every page reads from the dbt-built warehouse, never the raw CSVs. Most
+pages read a single mart via `database.load_mart(name)` — that covers
+everything except three spec requirements that need finer grain than any
+mart carries:
+
+- Page 2's per-item drill-down (channel/hour/temperature-group demand
+  for a selected menu item)
+- Page 4's hourly-by-weekday heatmap
+- Page 1's auto-summary, which compares actual prep time against
+  `fact_orders.promised_minutes`
+
+For those, the app queries `main.fact_orders`, `main.fact_order_items`,
+`main.dim_date`, and `intermediate.int_hourly_demand` directly —
+still dbt-built DuckDB tables, just outside the `marts` schema. This was
+a deliberate scope decision (querying the existing fact/dim layer from
+the app) rather than reopening the dbt layer to add the missing grain as
+new marts.
+
+Each `app/pages/*.py` file inserts its own directory onto `sys.path`
+before importing from `components` (`sys.path.insert(0,
+str(Path(__file__).resolve().parents[1]))`) rather than relying on
+Streamlit's multipage import behaviour, since that behaviour isn't
+guaranteed to add the same directory to the path for `Home.py` and for
+scripts under `pages/`.
