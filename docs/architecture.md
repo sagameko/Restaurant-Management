@@ -226,7 +226,12 @@ log for when/why it was added.
   feed's rhythm resembles the historical dataset's, not a separately
   invented one. The pure core (`generate_events`) never sleeps and is
   fully unit-tested; `stream()` is a thin async wrapper adding real
-  (time-scaled) pacing on top, used only by the live app.
+  (time-scaled) pacing on top, used only by the live app —
+  `max_real_sleep_seconds` (default 20.0) caps any single wait, so the
+  ~14-simulated-hour dead gap between dinner close and next-day lunch
+  gets fast-forwarded rather than freezing the live feed for ~14 real
+  minutes (found via an actual long-running demo; see
+  `docs/development_log.md`, 2026-07-25).
 - `streaming/aggregator.py` — `RollingWindowAggregator`, a deque-based
   sliding-window KPI rollup (order count, revenue, items/order, orders
   by channel). This is the "real-time processing" layer — plain Python,

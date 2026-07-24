@@ -49,6 +49,7 @@ different failure modes, worth understanding both.
 - [Demo](#demo)
 - [Disclaimer](#disclaimer)
 - [Tech stack](#tech-stack)
+- [Documentation](#documentation)
 - [Status](#status)
 - [Setup](#setup)
 - [Seed data](#seed-data)
@@ -74,11 +75,13 @@ below first.
 
 [![Demo walkthrough](docs/screenshots/demo.gif)](docs/screenshots.md)
 
-**→ [See all 8 pages in `docs/screenshots.md`](docs/screenshots.md)** —
-Executive Overview, Menu Engineering, Channel Profitability, Service
-Performance, Labour Productivity, Inventory Risk, Customer Experience,
-and Demand Forecast, each with a short description of what it shows.
-All data shown is synthetic; see the disclaimer below.
+**→ [See all 12 pages in `docs/screenshots.md`](docs/screenshots.md)** —
+this batch dashboard's 8 pages (Executive Overview, Menu Engineering,
+Channel Profitability, Service Performance, Labour Productivity,
+Inventory Risk, Customer Experience, Demand Forecast), plus the
+[real-time React app's](#running-the-react-frontend) 4, each with a
+short description of what it shows. All data shown is synthetic; see
+the disclaimer below.
 
 ## Disclaimer
 
@@ -102,13 +105,30 @@ financial, or transaction data appears anywhere in this project.
 | Forecasting | [scikit-learn](https://scikit-learn.org/) | Naive/moving-average baselines vs. linear regression and random forest, time-based validated. |
 | Live stream | [FastAPI](https://fastapi.tiangolo.com/) + WebSockets | A second, real-time showcase: a Poisson-process order simulator streamed over `/ws/orders`, no message broker needed at this scale. |
 | Live frontend | React + TypeScript, [react-router-dom](https://reactrouter.com/), [Tailwind CSS](https://tailwindcss.com/), [Recharts](https://recharts.org/) | Vite-built, 4-page app (Live Operations, Order History, Session Analytics, About) consuming the WebSocket + REST endpoints above — independent of the Python/uv toolchain. |
-| Quality | pytest, [Ruff](https://docs.astral.sh/ruff/), Vitest, oxlint | 95 Python tests + 12 frontend tests, including an end-to-end Python pipeline test and headless-browser checks for both dashboards. |
+| Quality | pytest, [Ruff](https://docs.astral.sh/ruff/), Vitest, oxlint | 96 Python tests + 12 frontend tests, including an end-to-end Python pipeline test and headless-browser checks for both dashboards. |
 | CI | GitHub Actions | Two parallel jobs: Python (lint → test → generate → load → `dbt build` → verify marts) and frontend (lint → test → build), on every PR. |
 
-See `docs/architecture.md` for how the pieces actually fit together,
-`docs/business_rules.md` for the (surprisingly deep) business logic
-behind the synthetic data, and `docs/project_decisions.md` /
-`docs/interview_talking_points.md` for the "why," curated.
+See [Documentation](#documentation) below for the full set of docs this
+project maintains — architecture, the business-logic formulas, the
+algorithms and why they were chosen, and more.
+
+## Documentation
+
+Every doc below is maintained, not aspirational — each is updated in the
+same session as the code it describes, not written once and left stale.
+
+| Doc | What's in it |
+|---|---|
+| [`docs/architecture.md`](docs/architecture.md) | How the pieces fit together: the data flow (generate → DuckDB → dbt → marts → apps), a Mermaid system diagram, and per-layer responsibilities for both apps. |
+| [`docs/business_rules.md`](docs/business_rules.md) | Every formula and config-driven business rule: demand generation, food cost, menu-engineering classification, the forecast feature set, and the live simulator's rate function — with the exact `config/*.yaml` keys each one reads. |
+| [`docs/algorithms.md`](docs/algorithms.md) | The actual methods used and *why that one*: Poisson-thinning for the live simulator, the forecast model comparison methodology, median vs. mean for classification/benchmarks, recursive multi-step forecasting — the technical depth behind the business rules. |
+| [`docs/data_dictionary.md`](docs/data_dictionary.md) | Every seed and raw table's schema, grain, and primary/foreign keys. |
+| [`docs/limitations.md`](docs/limitations.md) | Honest caveats about what the synthetic data does and doesn't represent — read this before trusting any number in a screenshot. |
+| [`docs/development_log.md`](docs/development_log.md) | The real bugs found while building this, in Problem/Cause/Resolution/Lesson format — including ones only caught by actually running the app, not by passing tests. |
+| [`docs/project_decisions.md`](docs/project_decisions.md) | The curated "why" behind the major architecture choices, each pointing at concrete evidence (a bug, a number) rather than asserting the decision was right. |
+| [`docs/interview_talking_points.md`](docs/interview_talking_points.md) | A scannable, themed version of the same material — meant to be read in under a minute. |
+| [`docs/screenshots.md`](docs/screenshots.md) | A full visual tour of both apps — all 12 pages, plus a demo GIF. |
+| `PROGRESS.md` (gitignored, not in this repo) | The session-by-session build log this whole project was actually built from — kept local as a working scratchpad, not published as a polished doc. |
 
 ## Status
 
@@ -126,7 +146,7 @@ stream (FastAPI + WebSockets, no message broker) and a 4-page React
 frontend (`frontend/`, Tailwind + recharts + react-router-dom) consuming
 it live — Live Operations, Order History, Session Analytics, and
 About — as a second, complementary showcase built on data the batch
-pipeline doesn't have, alongside the batch pipeline (95 Python tests +
+pipeline doesn't have, alongside the batch pipeline (96 Python tests +
 12 frontend tests in total now).
 
 **In progress** — self-hosted deployment behind a real domain.
@@ -226,6 +246,11 @@ curl http://localhost:8000/api/live/summary
 ```
 
 or connect to `ws://localhost:8000/ws/orders` for the live event feed.
+Note: overnight (dinner close to next-day lunch, ~14 simulated hours of
+zero arrival rate) is fast-forwarded rather than waited out in full —
+found via an actual multi-minute live demo, not a short smoke test; see
+`docs/development_log.md` (2026-07-25) for the story and
+`docs/business_rules.md` for exactly how the fast-forward works.
 
 ## Running the React frontend
 

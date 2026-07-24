@@ -172,18 +172,33 @@ class LiveOrderSimulator:
         return events
 
     async def stream(
-        self, *, start_time: datetime | None = None, time_scale: float = 60.0
+        self,
+        *,
+        start_time: datetime | None = None,
+        time_scale: float = 60.0,
+        max_real_sleep_seconds: float = 20.0,
     ) -> AsyncIterator[OrderEvent]:
         """Yield events in real time. `time_scale` simulated hours pass
         per real hour is 1.0; the default 60.0 means one simulated hour
         passes per real minute, so a full day's rhythm (quiet mornings,
         lunch/dinner rushes) plays out in ~20 real minutes instead of a day.
+
+        The gap between dinner close and the next day's lunch open is
+        ~14 simulated hours of exactly-zero arrival rate — at the default
+        `time_scale` that's a ~14 *real* minute wait for a single
+        `asyncio.sleep`, which would make a live demo look frozen rather
+        than just quiet overnight. `max_real_sleep_seconds` caps how long
+        any single wait is allowed to actually block for: real overnight
+        gaps get fast-forwarded rather than waited out in full. This
+        changes the *pacing* during closed hours only, not which events
+        are generated or their timestamps/order — a deliberate demo-UX
+        choice, not a claim that overnight pacing is realistic.
         """
         sim_time = start_time or datetime.now()
         while True:
             next_time, event = self._next_arrival(sim_time)
             real_delay_seconds = (next_time - sim_time).total_seconds() / time_scale
-            await asyncio.sleep(real_delay_seconds)
+            await asyncio.sleep(min(real_delay_seconds, max_real_sleep_seconds))
             sim_time = next_time
             yield event
 

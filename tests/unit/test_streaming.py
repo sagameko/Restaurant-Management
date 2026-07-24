@@ -4,7 +4,9 @@ aggregator — all pure/deterministic, no real sleeping or network."""
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -147,6 +149,31 @@ def test_generate_events_item_counts_and_channels_are_within_configured_domain(
         assert event.item_count in valid_counts
         assert event.channel in {"dine_in", "pickup", "uber_eats", "doordash"}
         assert event.subtotal > 0
+
+
+def test_stream_caps_real_sleep_across_the_overnight_gap(simulator):
+    # Dinner closes at 21:00; the next arrival isn't until tomorrow's
+    # lunch — a real gap of ~14 simulated hours. At time_scale=60 that's
+    # a ~14 *real* minute wait for a single asyncio.sleep, which would
+    # make a live demo look frozen rather than just quiet overnight.
+    # max_real_sleep_seconds must cap that single wait, not just make
+    # sleeps "shorter on average".
+    sleep_calls: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        sleep_calls.append(seconds)
+
+    async def run() -> None:
+        with patch("restaurant_ops.streaming.simulator.asyncio.sleep", fake_sleep):
+            start = datetime(2026, 1, 5, 20, 55)  # 5 minutes before dinner close
+            stream = simulator.stream(start_time=start, time_scale=60.0, max_real_sleep_seconds=5.0)
+            for _ in range(3):
+                await stream.__anext__()
+
+    asyncio.run(run())
+
+    assert sleep_calls, "expected at least one sleep to have been recorded"
+    assert max(sleep_calls) <= 5.0
 
 
 def test_rolling_window_aggregator_evicts_old_events():
