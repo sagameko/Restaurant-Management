@@ -4,7 +4,9 @@ aggregator — all pure/deterministic, no real sleeping or network."""
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -12,11 +14,13 @@ import pytest
 from restaurant_ops.config import get_business_rules
 from restaurant_ops.streaming.aggregator import RollingWindowAggregator
 from restaurant_ops.streaming.events import OrderEvent
+from restaurant_ops.streaming.session import SessionHistory, compute_session_summary
 from restaurant_ops.streaming.simulator import (
     LiveOrderSimulator,
     _intraday_intensity,
     _triangular_pdf,
     arrival_rate_per_hour,
+    default_start_time,
 )
 
 
@@ -76,6 +80,14 @@ def test_arrival_rate_is_higher_on_saturday_than_monday(business_rules):
     monday_rate = arrival_rate_per_hour(monday_dinner, business_rules, average_daily_orders=100)
     saturday_rate = arrival_rate_per_hour(saturday_dinner, business_rules, average_daily_orders=100)
     assert saturday_rate > monday_rate
+
+
+def test_default_start_time_falls_inside_todays_lunch_window(business_rules):
+    start = default_start_time()
+    assert start.date() == datetime.now().date()
+    # Guaranteed non-zero arrival rate at that exact moment, regardless
+    # of what real wall-clock time the server happens to start at.
+    assert arrival_rate_per_hour(start, business_rules, average_daily_orders=100) > 0
 
 
 @pytest.fixture
@@ -139,6 +151,31 @@ def test_generate_events_item_counts_and_channels_are_within_configured_domain(
         assert event.subtotal > 0
 
 
+def test_stream_caps_real_sleep_across_the_overnight_gap(simulator):
+    # Dinner closes at 21:00; the next arrival isn't until tomorrow's
+    # lunch — a real gap of ~14 simulated hours. At time_scale=60 that's
+    # a ~14 *real* minute wait for a single asyncio.sleep, which would
+    # make a live demo look frozen rather than just quiet overnight.
+    # max_real_sleep_seconds must cap that single wait, not just make
+    # sleeps "shorter on average".
+    sleep_calls: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        sleep_calls.append(seconds)
+
+    async def run() -> None:
+        with patch("restaurant_ops.streaming.simulator.asyncio.sleep", fake_sleep):
+            start = datetime(2026, 1, 5, 20, 55)  # 5 minutes before dinner close
+            stream = simulator.stream(start_time=start, time_scale=60.0, max_real_sleep_seconds=5.0)
+            for _ in range(3):
+                await stream.__anext__()
+
+    asyncio.run(run())
+
+    assert sleep_calls, "expected at least one sleep to have been recorded"
+    assert max(sleep_calls) <= 5.0
+
+
 def test_rolling_window_aggregator_evicts_old_events():
     aggregator = RollingWindowAggregator(window_minutes=10)
     base = datetime(2026, 1, 5, 12, 0)
@@ -176,3 +213,61 @@ def test_rolling_window_aggregator_recent_events_respects_limit():
     recent = aggregator.recent_events(limit=2)
     assert len(recent) == 2
     assert recent[-1].timestamp == base + timedelta(minutes=4)
+
+
+def test_session_history_caps_at_maxlen():
+    history = SessionHistory(maxlen=3)
+    base = datetime(2026, 1, 5, 12, 0)
+    for i in range(5):
+        history.add(make_event(base + timedelta(minutes=i)))
+
+    events = history.events
+    assert len(events) == 3
+    # Oldest two evicted; the most recent three survive, in order.
+    assert [e.timestamp for e in events] == [
+        base + timedelta(minutes=2),
+        base + timedelta(minutes=3),
+        base + timedelta(minutes=4),
+    ]
+
+
+def test_compute_session_summary_totals_and_busiest_channel():
+    base = datetime(2026, 1, 5, 12, 0)
+    events = [
+        make_event(base, channel="dine_in", subtotal=10.0),
+        make_event(base + timedelta(minutes=1), channel="dine_in", subtotal=20.0),
+        make_event(base + timedelta(minutes=2), channel="pickup", subtotal=15.0),
+    ]
+
+    summary = compute_session_summary(events, session_start=base)
+
+    assert summary.total_orders == 3
+    assert summary.total_revenue == pytest.approx(45.0)
+    assert summary.busiest_channel == "dine_in"
+    assert summary.orders_by_channel == {"dine_in": 2, "pickup": 1}
+    assert summary.session_duration_minutes == pytest.approx(2.0)
+
+
+def test_compute_session_summary_peak_orders_per_minute():
+    base = datetime(2026, 1, 5, 12, 0)
+    events = [
+        make_event(base, subtotal=10.0),
+        make_event(base + timedelta(seconds=30), subtotal=10.0),
+        make_event(base + timedelta(minutes=1), subtotal=10.0),
+    ]
+
+    summary = compute_session_summary(events, session_start=base)
+
+    assert summary.peak_orders_per_minute == 2
+
+
+def test_compute_session_summary_handles_no_events():
+    base = datetime(2026, 1, 5, 12, 0)
+    summary = compute_session_summary([], session_start=base)
+
+    assert summary.total_orders == 0
+    assert summary.total_revenue == 0.0
+    assert summary.busiest_channel is None
+    assert summary.orders_by_channel == {}
+    assert summary.peak_orders_per_minute == 0
+    assert summary.session_duration_minutes == pytest.approx(0.0)

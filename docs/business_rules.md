@@ -316,6 +316,84 @@ avg_shift_hours       = mean actual_hours from fact_employee_shifts,
 recommended_headcount = ceil(recommended_hours / avg_shift_hours)
 ```
 
+## Live order stream (Phase 10)
+
+Implemented in `src/restaurant_ops/streaming/`. Not part of the original
+spec (see `PROGRESS.md`) — a second, real-time consumer of the *same*
+demand model the batch generator uses, rather than a separately invented
+one.
+
+**Arrival model.** Orders arrive as a
+[non-homogeneous Poisson process](https://en.wikipedia.org/wiki/Poisson_point_process#Non-homogeneous),
+generated via the standard **thinning algorithm**
+(`simulator.LiveOrderSimulator._next_arrival`): draw a candidate
+inter-arrival time from an exponential distribution at the fastest
+possible rate (`lambda_max`, the true rate's supremum), then accept that
+candidate with probability `actual_rate(t) / lambda_max` — reject and
+redraw otherwise. This produces arrivals whose rate genuinely varies
+continuously over time without ever branching on "is the kitchen open
+right now": outside service hours the true rate is exactly zero, so
+every candidate there is rejected until the clock advances into an open
+window, with no special-cased `if closed: skip` logic anywhere.
+
+**The rate function itself**, `arrival_rate_per_hour(t)`, is
+`expected_orders_today × intraday_density(hour_of_day)`, where:
+
+```
+expected_orders_today = average_daily_orders × weekday_multipliers[weekday(t)]
+
+intraday_density(hour) = lunch_share  × triangular_pdf(hour, lunch.start,  lunch.peak,  lunch.end)
+                        + dinner_share × triangular_pdf(hour, dinner.start, dinner.peak, dinner.end)
+
+  where dinner_share = demand.daypart_share.dinner_base, lunch_share = 1 - dinner_share
+```
+
+Each `triangular_pdf` is a standard
+[triangular distribution](https://en.wikipedia.org/wiki/Triangular_distribution)
+density (0 at its window's edges, peaking at `peak_hour`), so
+`intraday_density` integrates to exactly 1 across a full day — a proper
+probability density, not an ad hoc shape. Every input
+(`dayparts.*`, `demand.weekday_multipliers`, `demand.daypart_share`) is
+the same config the batch generator reads, so the live feed's rhythm —
+busier Friday/Saturday dinners, quiet Monday lunches — matches the
+historical dataset's without re-deriving it.
+
+**Per-order attributes**: `item_count` is drawn from
+`demand.items_per_order_weights` (the same basket-size distribution the
+batch generator uses); `subtotal` is `item_count × average_item_price ×
+lognormal_noise`, where `average_item_price` is the real mean
+`selling_price` across `data/seed/menu_items.csv` — a lightweight
+stand-in, not a full basket simulation like the batch generator's (see
+`docs/limitations.md`).
+
+**Demo start time.** `simulator.default_start_time()` starts the
+simulated clock 30 minutes into *today's* lunch window rather than real
+wall-clock "now" — free to do, since the arrival-rate function only
+depends on the simulated clock, and it means a demo produces orders
+almost immediately regardless of what time of day it's actually started.
+(A `triangular_pdf` is exactly 0 at its own window boundary, which is why
+this is 30 minutes in, not exactly on the hour.)
+
+**Overnight fast-forward.** Dinner close to next-day lunch is ~14
+simulated hours of exactly-zero arrival rate. `_next_arrival` correctly
+finds the next real arrival on the other side of that gap in one step,
+but `stream()`'s single `await asyncio.sleep(...)` for that gap would
+otherwise be a ~14 *real* minute wait at the default `time_scale` —
+found by actually running a demo long enough to hit it, not by
+inspection. `stream(max_real_sleep_seconds=20.0)` caps any single wait,
+so overnight gaps get fast-forwarded rather than waited out in full; the
+event's own timestamp is unaffected; only how long the demo blocks
+before showing it changes. See `docs/algorithms.md` for the general
+"why thinning" reasoning this builds on.
+
+**Rolling window vs. session history**: `aggregator.RollingWindowAggregator`
+answers "what does the last 15 minutes look like" (a deque that evicts
+events older than the window, recomputed on every new arrival);
+`session.SessionHistory` answers "what has happened all session"
+(a capped `deque(maxlen=500)` — bounded so a long-running demo process
+doesn't grow memory unboundedly). Both read from the same event stream;
+neither is a re-implementation of the other.
+
 ## Weather and calendar assumptions
 
 Temperature follows a synthetic seasonal cosine curve for Melbourne

@@ -226,20 +226,122 @@ log for when/why it was added.
   feed's rhythm resembles the historical dataset's, not a separately
   invented one. The pure core (`generate_events`) never sleeps and is
   fully unit-tested; `stream()` is a thin async wrapper adding real
-  (time-scaled) pacing on top, used only by the live app.
+  (time-scaled) pacing on top, used only by the live app —
+  `max_real_sleep_seconds` (default 20.0) caps any single wait, so the
+  ~14-simulated-hour dead gap between dinner close and next-day lunch
+  gets fast-forwarded rather than freezing the live feed for ~14 real
+  minutes (found via an actual long-running demo; see
+  `docs/development_log.md`, 2026-07-25).
 - `streaming/aggregator.py` — `RollingWindowAggregator`, a deque-based
   sliding-window KPI rollup (order count, revenue, items/order, orders
   by channel). This is the "real-time processing" layer — plain Python,
   no external stream-processing framework, proportionate to the actual
-  event volume.
+  event volume. Always trailing 15 minutes — correct for its job, but
+  not enough for a full-session view.
+- `streaming/session.py` — `SessionHistory` (a capped `deque(maxlen=500)`
+  of every `OrderEvent` since start — a demo process, not a service
+  meant to run indefinitely) and `compute_session_summary()`, a pure
+  function over that history (total orders/revenue, busiest channel,
+  orders by channel, peak orders in any single minute, session
+  duration). The companion to `aggregator.py` for pages that need the
+  fuller session rather than a rolling snapshot.
 - `realtime/main.py` — a FastAPI app mirroring `app/`'s role as a thin
-  consumer: `GET /api/live/summary` (REST snapshot) and `websocket
-  /ws/orders` (pushes the current snapshot on connect, then every new
-  event as it's produced). Runs the simulator as a background `asyncio`
-  task at startup.
+  consumer: `GET /api/live/summary` (rolling-window REST snapshot),
+  `GET /api/live/history` (capped session event list), `GET
+  /api/live/session-summary` (`compute_session_summary()` result), and
+  `websocket /ws/orders` (pushes the current rolling-window snapshot on
+  connect, then every new event as it's produced). Runs the simulator as
+  a background `asyncio` task at startup, starting the simulated clock
+  at `simulator.default_start_time()` — 30 minutes into today's lunch
+  window, not `datetime.now()` — so a freshly started demo produces
+  orders almost immediately regardless of what real wall-clock time the
+  server happens to start at (the arrival-rate function only depends on
+  the simulated clock, so this has no downside). That same `start_time`
+  value is computed once and reused as `session_start` for
+  `SessionHistory`, for the same reason: session duration has to be
+  measured in the same clock the event timestamps use.
 
 No message broker (Kafka/Redis) — a deliberate scope decision for a
 showcase project at this event volume; WebSockets carry the stream
-directly. See the plan history for the fuller rationale and the planned
-next phases (a React frontend consuming `/ws/orders`, then self-hosted
-deployment behind a reverse proxy alongside the existing Streamlit app).
+directly.
+
+## React frontend (`frontend/`)
+
+Consumes `realtime/main.py`'s feed — a separate Vite + React +
+TypeScript project, independent of the Python/uv toolchain, living
+alongside `app/` (Streamlit) rather than replacing it. A multi-page app
+(`react-router-dom`), built on data Streamlit doesn't have — live and
+session state — not a duplicate of the historical marts. Component
+library: plain Tailwind CSS + `recharts` for the chart, not Tremor —
+Tremor's stable release (`@tremor/react` 3.x) requires React ^18 and a
+Tailwind v3-era config, both incompatible with this project's React 19 +
+Tailwind v4; its own v4-compatible line was still beta at build time.
+`recharts` is the library Tremor itself is built on, so the fallback is
+the same visual family without the version conflict.
+
+Four pages, navigated via `src/components/Nav.tsx` (`main.tsx` wraps
+`<App>` in `<BrowserRouter>`; `App.tsx` is the layout — `Nav` +
+`<Routes>` — not a page body itself):
+
+- `pages/LiveOperations.tsx` — KPI tiles, a live orders-per-minute
+  chart, a channel breakdown, and a scrolling order feed, pushed over
+  `/ws/orders`. The original single-page view.
+- `pages/OrderHistory.tsx` — a sortable/filterable table of every order
+  seen this session (not just the scrolling feed's last ~30), backed by
+  `GET /api/live/history`. Sort/filter logic lives in
+  `src/lib/historyTable.ts` (pure, unit-tested), not inlined in the
+  component.
+- `pages/SessionAnalytics.tsx` — cumulative stats since the server
+  started (total orders/revenue, busiest channel, peak orders/minute,
+  session duration), backed by `GET /api/live/session-summary` —
+  distinct from Live Operations' rolling 15-minute window. Reuses
+  `ChannelBreakdown`, already generic over `orders_by_channel`.
+- `pages/About.tsx` — static content on the Poisson-process simulator
+  and the no-message-broker decision, drawn from
+  `docs/project_decisions.md`. No data fetching.
+
+Supporting modules:
+
+- `src/lib/types.ts` — TypeScript types mirroring `realtime/main.py`'s
+  JSON shapes exactly (`OrderEvent`, `LiveSummary`, `SessionSummary`,
+  the two WebSocket message variants) — hand-kept in sync, same
+  trade-off already accepted for `dim_channel`'s commission rates.
+- `src/lib/websocket.ts` — a typed WebSocket client with reconnect-with-
+  backoff, isolated from React so it's unit-testable without mounting a
+  component (`websocket.test.ts` uses a minimal mock `WebSocket`).
+  Defaults to `ws://127.0.0.1:8000/ws/orders`, not `localhost` — the
+  documented run command (`uv run uvicorn realtime.main:app --reload`,
+  no `--host`) binds to `127.0.0.1` only, and on hosts where `localhost`
+  resolves to `::1` first, a client targeting `localhost` hangs against
+  a socket nothing is listening on (a permanent "Reconnecting…" state).
+  Overridable via `VITE_WS_URL`. `src/lib/api.ts` applies the same
+  reasoning to the REST base URL (`VITE_API_BASE_URL`).
+- `src/lib/palette.ts` — the same validated categorical hex order as
+  `app/components/charts.py`'s `CATEGORICAL`, so channel colors match
+  between the Streamlit dashboard and this app.
+- `src/lib/buckets.ts` — buckets incoming events into per-minute counts
+  for the live chart. Pure, unit-tested — and the tests specifically
+  cover a real subtlety: event timestamps are the simulator's own
+  *simulated* clock (compressed via `time_scale`), not real wall-clock
+  time, so the trailing window has to anchor to the latest event's own
+  timestamp, never to the browser's `Date.now()`.
+- `src/hooks/useLiveOrders.ts` — wires the WebSocket + `buckets.ts` into
+  React (connection status, rolling feed, summary, chart buckets); owned
+  by `App.tsx` and passed down, so the connection persists across page
+  navigation and `Nav` can show status app-wide.
+- `src/hooks/useSessionData.ts` — polls `/api/live/history` and
+  `/api/live/session-summary` every ~5s, deliberately separate from the
+  WebSocket path since Order History/Session Analytics aren't the
+  primary live-updating view — keeps the WS message contract untouched.
+- `src/components/` — `KpiCard`, `ChannelBreakdown`, `LiveChart`,
+  `OrderFeed`, `ConnectionBadge`, `Nav`. `App.tsx` composes the layout
+  plus a synthetic-data disclaimer banner, matching the convention
+  already established on `app/Home.py`.
+
+CI runs a second, parallel job (`.github/workflows/ci.yml`) for this
+project — `npm ci`, lint (`oxlint`), `npm run test` (Vitest), `npm run
+build` — independent of the Python job.
+
+Self-hosted deployment (Caddy reverse proxy in front of both this app
+and Streamlit, on the user's own domain) is the next and final piece —
+see `PROGRESS.md` for the planned shape.

@@ -329,3 +329,50 @@ before trusting any dashboard number or screenshot, check the actual row
 count/date range of the mart you're about to look at, or just
 unconditionally regenerate the full dataset — don't assume yesterday's
 local build is still what's on disk.
+
+## 2026-07-25
+
+Problem:
+The live order stream (`realtime/main.py`) appeared to freeze — KPI
+numbers, the live chart, and the order feed all stopped updating,
+identically, for well over a minute of real time, with no errors in the
+server log and every HTTP endpoint still responding normally.
+
+Cause:
+Not a crash. `LiveOrderSimulator._next_arrival` correctly finds the next
+order's simulated timestamp in one step, including across the ~14
+simulated-hour gap between dinner close and the next day's lunch
+opening (during which the true arrival rate is exactly zero). But
+`stream()` then does a single `await asyncio.sleep(real_delay_seconds)`
+for that *entire* gap before yielding the event — at the default
+`time_scale=60`, a 14-simulated-hour gap is a genuine ~14 *real* minute
+`asyncio.sleep`. The event loop stayed responsive throughout (which is
+why HTTP endpoints kept working) — only the simulator's own background
+task was legitimately, correctly waiting, just for far longer than a
+live demo should ever visibly pause.
+
+Resolution:
+Added `max_real_sleep_seconds` (default 20.0) to `stream()`: each wait
+is `min(real_delay_seconds, max_real_sleep_seconds)`, then `sim_time`
+still jumps straight to the actual next arrival regardless of how long
+was actually slept. This only changes *pacing* during closed hours —
+the generated event and its timestamp are identical either way — not
+the demand model itself. Added
+`test_stream_caps_real_sleep_across_the_overnight_gap`, which patches
+`asyncio.sleep` to record call arguments and asserts none exceed the
+cap — and, to prove the test isn't vacuous, confirmed via a separate
+isolated script that the *uncapped* delay for this exact scenario really
+is ~859 seconds, not a few seconds that happened to round down.
+
+Lesson:
+This class of bug is invisible to unit tests that only run for seconds
+of simulated time (every existing test used short windows — hours, not
+days — specifically because they run fast) and invisible to a short
+manual smoke test too (a 15-30 second check, which is what every prior
+phase's live-demo verification in this project happened to use). It
+only showed up because this session's demo ran long enough, doing
+other work in between, to actually cross a day boundary. The general
+lesson already written elsewhere in this log — verify by actually
+running the thing, not by reading the code — has a corollary: *how
+long* you run it for is itself a variable worth varying, since some
+bugs only exist past a duration no test or quick check happens to reach.
