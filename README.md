@@ -40,17 +40,13 @@ see [Generating synthetic operational data](#generating-synthetic-operational-da
 and [Loading into DuckDB and running dbt](#loading-into-duckdb-and-running-dbt)
 below first.
 
-| Executive Overview | Menu Engineering |
-|---|---|
-| ![Executive Overview](docs/screenshots/executive_overview.png) | ![Menu Engineering](docs/screenshots/menu_engineering.png) |
+[![Executive Overview](docs/screenshots/executive_overview.png)](docs/screenshots.md)
 
-| Channel Profitability | Inventory Risk |
-|---|---|
-| ![Channel Profitability](docs/screenshots/channel_profitability.png) | ![Inventory Risk](docs/screenshots/inventory_risk.png) |
-
-Three more pages not pictured — Service Performance, Labour Productivity,
-Customer Experience — follow the same pattern. All data shown is
-synthetic; see the disclaimer below.
+**→ [See all 8 pages in `docs/screenshots.md`](docs/screenshots.md)** —
+Executive Overview, Menu Engineering, Channel Profitability, Service
+Performance, Labour Productivity, Inventory Risk, Customer Experience,
+and Demand Forecast, each with a short description of what it shows.
+All data shown is synthetic; see the disclaimer below.
 
 ## Disclaimer
 
