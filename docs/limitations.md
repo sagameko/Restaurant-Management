@@ -1,13 +1,13 @@
 # Limitations
 
 Honest caveats about what this dataset is and isn't, updated as each
-phase lands (currently: Phase 1-8).
+phase lands (currently: Phase 1-9).
 
 - **Synthetic data cannot validate actual business performance.** Every
   number in this project — costs, margins, demand patterns, ratings — is
   generated from configurable rules, not observed from a real restaurant.
   It demonstrates a data platform and a plausible operational story, not
-  Bon Bon Boy's or any real restaurant's actual performance.
+  any real restaurant's actual performance.
 - **Ingredient costs are estimates.** `ingredients.estimated_unit_cost`
   and everything derived from it (food cost, gross margin) are
   hand-authored plausible figures, not real supplier pricing.
