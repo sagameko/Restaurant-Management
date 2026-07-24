@@ -263,3 +263,69 @@ silently substitute for a step CI is supposed to perform. When a test
 depends on setup a CI step is responsible for, verify by actually
 removing that local state and re-running — don't just re-read the YAML
 and reason about it.
+
+## 2026-07-24 (8)
+
+Problem:
+The Streamlit dashboard's Menu Engineering item drill-down showed
+"Estimated cost: $3,651" directly next to "Price: $13" for a single
+item — a nonsensical per-unit price beside a four-figure "cost."
+
+Cause:
+`mart_menu_engineering.estimated_food_cost` is the item's *total* cost
+summed across every unit sold in the dataset (it's built for the
+menu-engineering matrix's aggregate margin calculation), but
+`selling_price` is a genuine per-unit figure. The Streamlit page put both
+under a KPI row without checking they shared the same grain.
+
+Resolution:
+Divided by `units_sold` to get a per-unit figure before displaying it,
+and relabelled the card "Estimated cost / unit."
+
+Lesson:
+This wasn't caught by reading the mart's SQL or the Streamlit code in
+isolation — both were individually correct for what they were built for.
+It was only visible by actually looking at the *rendered numbers* next
+to each other on the page (via a headless-browser screenshot), the same
+way a human reviewer would notice "$3,651 next to $13 looks wrong" at a
+glance. A column name matching between two joined-in-the-UI data sources
+isn't proof they share a grain — check by looking at real rendered
+output, not just by reading the query.
+
+## 2026-07-24 (9)
+
+Problem:
+Twice in one week, a mart that should have had ~365-730 rows (one per
+business date, or one per date/daypart) instead had only 14-28 rows, and
+every KPI on the affected Streamlit page looked tiny and wrong at first
+glance — `mart_labour_productivity` briefly showed only 28 rows while
+building Phase 7's Labour Productivity page, and it recurred later in
+Phase 8 with fresh screenshots suddenly showing $8,619 net sales instead
+of the expected ~$1.2M.
+
+Cause:
+`data/database/restaurant.duckdb` and `data/raw/*.csv` are gitignored
+and machine-local, not part of the repo's committed state. Two different
+things reset them to a small 14-day dataset: a prior session's leftover
+local state, and — the recurring one — `tests/integration/test_pipeline.py`
+itself, which deliberately regenerates a small dataset
+(`--days 14 --average-orders 20`, matching the CI job's fast smoke test)
+as its own test fixture, as a side effect of simply running `uv run
+pytest`.
+
+Resolution:
+Regenerated the full year
+(`--start-date 2025-07-01 --days 365 --average-orders 100 --seed 42`,
+reload, `dbt build`) each time before trusting any screenshot or manual
+query again.
+
+Lesson:
+Local, gitignored database/data state can silently be the wrong size or
+the wrong shape, and nothing about the dbt build succeeding (98/98 tests
+still pass either way) will tell you that — a 14-day dataset builds just
+as cleanly as a 365-day one. After running `pytest` (which exercises the
+real generate → load → `dbt build` pipeline as an integration test) and
+before trusting any dashboard number or screenshot, check the actual row
+count/date range of the mart you're about to look at, or just
+unconditionally regenerate the full dataset — don't assume yesterday's
+local build is still what's on disk.

@@ -1,9 +1,10 @@
 # Data dictionary
 
-Documents every table as it is implemented. The seed layer (Phase 1/2)
-and the daily-context/orders/order-items/reviews generated tables
-(Phase 3) exist so far; employee shifts and inventory movements will be
-added here once Phase 4/5 land.
+Documents every seed and raw table as implemented (Phases 1-5): menu,
+ingredients, suppliers, recipes, and employees (seed), plus daily
+context, orders, order items, reviews, employee shifts, and inventory
+movements (generated). The dbt layer (staging through marts) is
+documented separately — see the note at the end of this file.
 
 ## Seed tables (`data/seed/`)
 
