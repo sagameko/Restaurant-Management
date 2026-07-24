@@ -1,7 +1,7 @@
 # Limitations
 
 Honest caveats about what this dataset is and isn't, updated as each
-phase lands (currently: Phase 1-5).
+phase lands (currently: Phase 1-8).
 
 - **Synthetic data cannot validate actual business performance.** Every
   number in this project — costs, margins, demand patterns, ratings — is
@@ -77,3 +77,14 @@ phase lands (currently: Phase 1-5).
   engineering practice. An item is "High" popularity/profitability only
   relative to this menu's own median — see `docs/business_rules.md` for
   the exact definition.
+- **The demand forecast is validated against the generator's own
+  patterns, not real-world unpredictability.** Because the historical
+  data is produced by the same deterministic weekday/weather/promotion
+  rules the forecast's features are built from, a model like linear
+  regression can fit it unusually well (holdout MAPE well under 10% in
+  testing) — that demonstrates the forecasting *approach* (time-based
+  validation, feature engineering, model comparison) working correctly,
+  not that this technique would generalise to messier real demand. The
+  7-day-ahead forecast also depends on synthetically generated future
+  weather/calendar features (`restaurant_ops.forecasting.future`), not
+  real forecasts.
