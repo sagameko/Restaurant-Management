@@ -17,7 +17,8 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from restaurant_ops.streaming.aggregator import LiveSummary, RollingWindowAggregator
-from restaurant_ops.streaming.simulator import build_default_simulator
+from restaurant_ops.streaming.session import SessionHistory, SessionSummary, compute_session_summary
+from restaurant_ops.streaming.simulator import build_default_simulator, default_start_time
 
 AGGREGATOR_WINDOW_MINUTES = 15.0
 # Simulated hours that pass per real hour. 60 -> a full day's rhythm
@@ -25,6 +26,11 @@ AGGREGATOR_WINDOW_MINUTES = 15.0
 TIME_SCALE = 60.0
 
 aggregator = RollingWindowAggregator(window_minutes=AGGREGATOR_WINDOW_MINUTES)
+session_history = SessionHistory()
+# The same simulated-clock value passed to simulator.stream(start_time=...)
+# below — computed once, reused for both, so session duration is measured
+# in the same clock the event timestamps use.
+session_start = default_start_time()
 
 
 class ConnectionManager:
@@ -62,11 +68,24 @@ def _summary_payload(summary: LiveSummary) -> dict:
     }
 
 
+def _session_summary_payload(summary: SessionSummary) -> dict:
+    return {
+        "session_start": summary.session_start.isoformat(),
+        "session_duration_minutes": summary.session_duration_minutes,
+        "total_orders": summary.total_orders,
+        "total_revenue": summary.total_revenue,
+        "busiest_channel": summary.busiest_channel,
+        "orders_by_channel": summary.orders_by_channel,
+        "peak_orders_per_minute": summary.peak_orders_per_minute,
+    }
+
+
 async def _run_simulator() -> None:
     rng = np.random.default_rng()
     simulator = build_default_simulator(rng)
-    async for event in simulator.stream(time_scale=TIME_SCALE):
+    async for event in simulator.stream(start_time=session_start, time_scale=TIME_SCALE):
         aggregator.add(event)
+        session_history.add(event)
         await manager.broadcast(
             {
                 "type": "order",
@@ -87,7 +106,7 @@ app = FastAPI(title="Restaurant Ops — Live", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -101,6 +120,16 @@ def health() -> dict:
 @app.get("/api/live/summary")
 def get_summary() -> dict:
     return _summary_payload(aggregator.snapshot())
+
+
+@app.get("/api/live/history")
+def get_history() -> list[dict]:
+    return [event.model_dump(mode="json") for event in session_history.events]
+
+
+@app.get("/api/live/session-summary")
+def get_session_summary() -> dict:
+    return _session_summary_payload(compute_session_summary(session_history.events, session_start))
 
 
 @app.websocket("/ws/orders")

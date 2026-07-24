@@ -56,6 +56,7 @@ different failure modes, worth understanding both.
 - [Loading into DuckDB and running dbt](#loading-into-duckdb-and-running-dbt)
 - [Running the dashboard](#running-the-dashboard)
 - [Running the live order stream](#running-the-live-order-stream)
+- [Running the React frontend](#running-the-react-frontend)
 - [Development](#development)
 
 ## Demo
@@ -100,8 +101,9 @@ financial, or transaction data appears anywhere in this project.
 | App | [Streamlit](https://streamlit.io/) + Plotly | Eight pages reading straight from the dbt marts. |
 | Forecasting | [scikit-learn](https://scikit-learn.org/) | Naive/moving-average baselines vs. linear regression and random forest, time-based validated. |
 | Live stream | [FastAPI](https://fastapi.tiangolo.com/) + WebSockets | A second, real-time showcase: a Poisson-process order simulator streamed over `/ws/orders`, no message broker needed at this scale. |
-| Quality | pytest, [Ruff](https://docs.astral.sh/ruff/) | 90 tests including an end-to-end pipeline test; Ruff replaces flake8 + isort + black + pyupgrade in one fast tool. |
-| CI | GitHub Actions | Lint → test → generate → load → `dbt build` → verify marts, on every PR. |
+| Live frontend | React + TypeScript, [react-router-dom](https://reactrouter.com/), [Tailwind CSS](https://tailwindcss.com/), [Recharts](https://recharts.org/) | Vite-built, 4-page app (Live Operations, Order History, Session Analytics, About) consuming the WebSocket + REST endpoints above — independent of the Python/uv toolchain. |
+| Quality | pytest, [Ruff](https://docs.astral.sh/ruff/), Vitest, oxlint | 95 Python tests + 12 frontend tests, including an end-to-end Python pipeline test and headless-browser checks for both dashboards. |
+| CI | GitHub Actions | Two parallel jobs: Python (lint → test → generate → load → `dbt build` → verify marts) and frontend (lint → test → build), on every PR. |
 
 See `docs/architecture.md` for how the pieces actually fit together,
 `docs/business_rules.md` for the (surprisingly deep) business logic
@@ -117,14 +119,17 @@ intermediate → dimensions/facts → 7 marts, 98 passing checks); an 8-page
 Streamlit dashboard; a validated daily order-volume forecast (naive,
 moving-average, linear regression, and random forest, time-based
 validated, with a 7-day-ahead forecast and a staffing recommendation);
-and 90 passing tests. That's the entire original spec.
+and 77 passing Python tests. That's the entire original spec.
 
 **Also built, beyond the original scope** — a real-time order-event
-stream (FastAPI + WebSockets, no message broker) as a second,
-complementary showcase alongside the batch pipeline.
+stream (FastAPI + WebSockets, no message broker) and a 4-page React
+frontend (`frontend/`, Tailwind + recharts + react-router-dom) consuming
+it live — Live Operations, Order History, Session Analytics, and
+About — as a second, complementary showcase built on data the batch
+pipeline doesn't have, alongside the batch pipeline (95 Python tests +
+12 frontend tests in total now).
 
-**In progress** — a React frontend for the live stream, and self-hosted
-deployment behind a real domain.
+**In progress** — self-hosted deployment behind a real domain.
 
 See `docs/limitations.md` for what the synthetic data does and doesn't
 represent, and `docs/architecture.md` for how the pieces fit together.
@@ -220,10 +225,35 @@ infrastructure to run. Check it's alive with:
 curl http://localhost:8000/api/live/summary
 ```
 
-or connect to `ws://localhost:8000/ws/orders` for the live event feed. A
-React frontend consuming this endpoint, and self-hosted deployment
-alongside the Streamlit app, are planned next — see
-`docs/architecture.md`.
+or connect to `ws://localhost:8000/ws/orders` for the live event feed.
+
+## Running the React frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Opens at `http://localhost:5173` — a 4-page app, navigated from the top
+bar:
+
+- **Live Operations** — KPI tiles, a live orders-per-minute chart, a
+  channel breakdown, and a scrolling order feed, pushed over the
+  WebSocket above.
+- **Order History** — a sortable/filterable table of every order seen
+  this session (not just the scrolling feed's last ~30).
+- **Session Analytics** — cumulative stats since the server started
+  (total orders/revenue, busiest channel, peak orders/minute, session
+  duration) — distinct from Live Operations' rolling 15-minute window.
+- **About** — the architecture decisions behind this app (the
+  Poisson-process simulator, no message broker) for portfolio context.
+
+Requires the live order stream (previous section) to be running.
+Tailwind CSS + `recharts` + `react-router-dom`, independent of the
+Python/uv toolchain — see `docs/architecture.md` for why (short version:
+Tremor's stable release doesn't yet support React 19 / Tailwind v4).
+Self-hosted deployment alongside the Streamlit app is planned next.
 
 ## Development
 

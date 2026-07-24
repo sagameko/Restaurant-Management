@@ -12,11 +12,13 @@ import pytest
 from restaurant_ops.config import get_business_rules
 from restaurant_ops.streaming.aggregator import RollingWindowAggregator
 from restaurant_ops.streaming.events import OrderEvent
+from restaurant_ops.streaming.session import SessionHistory, compute_session_summary
 from restaurant_ops.streaming.simulator import (
     LiveOrderSimulator,
     _intraday_intensity,
     _triangular_pdf,
     arrival_rate_per_hour,
+    default_start_time,
 )
 
 
@@ -76,6 +78,14 @@ def test_arrival_rate_is_higher_on_saturday_than_monday(business_rules):
     monday_rate = arrival_rate_per_hour(monday_dinner, business_rules, average_daily_orders=100)
     saturday_rate = arrival_rate_per_hour(saturday_dinner, business_rules, average_daily_orders=100)
     assert saturday_rate > monday_rate
+
+
+def test_default_start_time_falls_inside_todays_lunch_window(business_rules):
+    start = default_start_time()
+    assert start.date() == datetime.now().date()
+    # Guaranteed non-zero arrival rate at that exact moment, regardless
+    # of what real wall-clock time the server happens to start at.
+    assert arrival_rate_per_hour(start, business_rules, average_daily_orders=100) > 0
 
 
 @pytest.fixture
@@ -176,3 +186,61 @@ def test_rolling_window_aggregator_recent_events_respects_limit():
     recent = aggregator.recent_events(limit=2)
     assert len(recent) == 2
     assert recent[-1].timestamp == base + timedelta(minutes=4)
+
+
+def test_session_history_caps_at_maxlen():
+    history = SessionHistory(maxlen=3)
+    base = datetime(2026, 1, 5, 12, 0)
+    for i in range(5):
+        history.add(make_event(base + timedelta(minutes=i)))
+
+    events = history.events
+    assert len(events) == 3
+    # Oldest two evicted; the most recent three survive, in order.
+    assert [e.timestamp for e in events] == [
+        base + timedelta(minutes=2),
+        base + timedelta(minutes=3),
+        base + timedelta(minutes=4),
+    ]
+
+
+def test_compute_session_summary_totals_and_busiest_channel():
+    base = datetime(2026, 1, 5, 12, 0)
+    events = [
+        make_event(base, channel="dine_in", subtotal=10.0),
+        make_event(base + timedelta(minutes=1), channel="dine_in", subtotal=20.0),
+        make_event(base + timedelta(minutes=2), channel="pickup", subtotal=15.0),
+    ]
+
+    summary = compute_session_summary(events, session_start=base)
+
+    assert summary.total_orders == 3
+    assert summary.total_revenue == pytest.approx(45.0)
+    assert summary.busiest_channel == "dine_in"
+    assert summary.orders_by_channel == {"dine_in": 2, "pickup": 1}
+    assert summary.session_duration_minutes == pytest.approx(2.0)
+
+
+def test_compute_session_summary_peak_orders_per_minute():
+    base = datetime(2026, 1, 5, 12, 0)
+    events = [
+        make_event(base, subtotal=10.0),
+        make_event(base + timedelta(seconds=30), subtotal=10.0),
+        make_event(base + timedelta(minutes=1), subtotal=10.0),
+    ]
+
+    summary = compute_session_summary(events, session_start=base)
+
+    assert summary.peak_orders_per_minute == 2
+
+
+def test_compute_session_summary_handles_no_events():
+    base = datetime(2026, 1, 5, 12, 0)
+    summary = compute_session_summary([], session_start=base)
+
+    assert summary.total_orders == 0
+    assert summary.total_revenue == 0.0
+    assert summary.busiest_channel is None
+    assert summary.orders_by_channel == {}
+    assert summary.peak_orders_per_minute == 0
+    assert summary.session_duration_minutes == pytest.approx(0.0)

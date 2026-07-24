@@ -188,6 +188,27 @@ class LiveOrderSimulator:
             yield event
 
 
+def default_start_time() -> datetime:
+    """A simulated-clock start time inside today's lunch window.
+
+    A freshly started live demo should begin producing orders almost
+    immediately, not sit at zero for however many real hours happen to
+    separate "now" from the next open service window — the arrival-rate
+    function only depends on the *simulated* clock, so starting it
+    inside a known-open window is free and has no downside.
+    """
+    # +30 minutes: the triangular intensity function is 0 exactly at a
+    # window's own boundary (as any triangular density is at its edges),
+    # so starting there would need a moment to warm up. Half an hour in
+    # is unambiguously inside the window with positive density.
+    business_rules = get_business_rules()
+    lunch_start_hour = business_rules["dayparts"]["lunch"]["start_hour"]
+    today = datetime.now().date()
+    return datetime.combine(today, datetime.min.time()) + timedelta(
+        hours=lunch_start_hour, minutes=30
+    )
+
+
 def build_default_simulator(rng: np.random.Generator) -> LiveOrderSimulator:
     """Wires the simulator to this project's real config and seed data —
     the average item price comes from `data/seed/menu_items.csv`, not a
