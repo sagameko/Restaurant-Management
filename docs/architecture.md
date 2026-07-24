@@ -1,6 +1,31 @@
 # Architecture
 
-Covers the data platform through Phase 7 (DuckDB + dbt + Streamlit).
+Covers the data platform through Phase 8 (generation → DuckDB + dbt →
+Streamlit → forecasting).
+
+## System diagram
+
+```mermaid
+flowchart TD
+    seed["data/seed/*.csv\n(hand-authored)"] --> load["scripts/load_raw_data.py"]
+    gen["scripts/generate_data.py\n(restaurant_ops.generation, seeded)"] --> raw["data/raw/*.csv"]
+    raw --> load
+    load --> rawschema[("DuckDB: raw schema")]
+    rawschema --> staging["dbt: staging (views)"]
+    staging --> intermediate["dbt: intermediate (views)"]
+    intermediate --> facts["dbt: dimensions + facts"]
+    facts --> marts[("dbt: 7 marts")]
+    marts --> app["Streamlit app\n(8 pages, app/)"]
+    marts --> forecasting["restaurant_ops.forecasting"]
+    facts --> forecasting
+    forecasting --> app
+
+    style rawschema fill:#e1e0d9,stroke:#898781
+    style marts fill:#e1e0d9,stroke:#898781
+```
+
+The ASCII version below carries the same flow with more per-layer detail
+(table/model names); this diagram is the at-a-glance version.
 
 ## Data flow
 

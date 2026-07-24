@@ -40,7 +40,7 @@ see [Generating synthetic operational data](#generating-synthetic-operational-da
 and [Loading into DuckDB and running dbt](#loading-into-duckdb-and-running-dbt)
 below first.
 
-[![Executive Overview](docs/screenshots/executive_overview.png)](docs/screenshots.md)
+[![Demo walkthrough](docs/screenshots/demo.gif)](docs/screenshots.md)
 
 **→ [See all 8 pages in `docs/screenshots.md`](docs/screenshots.md)** —
 Executive Overview, Menu Engineering, Channel Profitability, Service
@@ -70,9 +70,10 @@ with Bon Bon Boy and does not use confidential business information.
 | Quality | pytest, [Ruff](https://docs.astral.sh/ruff/) | 77 tests including an end-to-end pipeline test; Ruff replaces flake8 + isort + black + pyupgrade in one fast tool. |
 | CI | GitHub Actions | Lint → test → generate → load → `dbt build` → verify marts, on every PR. |
 
-See `docs/architecture.md` for how the pieces actually fit together, and
+See `docs/architecture.md` for how the pieces actually fit together,
 `docs/business_rules.md` for the (surprisingly deep) business logic
-behind the synthetic data.
+behind the synthetic data, and `docs/project_decisions.md` /
+`docs/interview_talking_points.md` for the "why," curated.
 
 ## Status
 

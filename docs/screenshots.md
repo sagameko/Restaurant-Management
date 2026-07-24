@@ -9,6 +9,14 @@ reads from.
 All data shown is synthetic — see the
 [README disclaimer](../README.md#disclaimer).
 
+## Quick look
+
+![Demo walkthrough](screenshots/demo.gif)
+
+Home → Executive Overview → Menu Engineering (including selecting a
+different item in the drill-down) → Channel Profitability → Demand
+Forecast.
+
 ## Home
 
 Landing page: a synthetic-data warning, a warehouse connectivity check,
