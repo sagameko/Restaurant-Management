@@ -206,3 +206,40 @@ following the same fact-table-access pattern as Phase 7's drill-downs),
 runs the pipeline once behind `st.cache_data`, and displays the results.
 See `docs/business_rules.md` for the exact feature list, split, and
 staffing formula.
+
+## Live order stream (`src/restaurant_ops/streaming/`, `realtime/`)
+
+A second, complementary showcase surface, additive to everything above
+and not a replacement for the batch pipeline or the Streamlit app —
+Streamlit stays the batch/historical BI tool; this is real-time. Not
+part of the original `instruction.pdf` spec; see `PROGRESS.md`'s session
+log for when/why it was added.
+
+- `streaming/events.py` — `OrderEvent`, a deliberately simpler schema
+  than the batch `Order`/`OrderItem` pair (event *flow*, not re-derived
+  food cost/inventory/staffing).
+- `streaming/simulator.py` — `LiveOrderSimulator` generates arrivals as a
+  non-homogeneous Poisson process (standard thinning algorithm) whose
+  rate function reuses the *same* `config/business_rules.yaml` shape the
+  batch generator uses (`dayparts.*`, `demand.weekday_multipliers`,
+  `demand.daypart_share`, `demand.items_per_order_weights`) — the live
+  feed's rhythm resembles the historical dataset's, not a separately
+  invented one. The pure core (`generate_events`) never sleeps and is
+  fully unit-tested; `stream()` is a thin async wrapper adding real
+  (time-scaled) pacing on top, used only by the live app.
+- `streaming/aggregator.py` — `RollingWindowAggregator`, a deque-based
+  sliding-window KPI rollup (order count, revenue, items/order, orders
+  by channel). This is the "real-time processing" layer — plain Python,
+  no external stream-processing framework, proportionate to the actual
+  event volume.
+- `realtime/main.py` — a FastAPI app mirroring `app/`'s role as a thin
+  consumer: `GET /api/live/summary` (REST snapshot) and `websocket
+  /ws/orders` (pushes the current snapshot on connect, then every new
+  event as it's produced). Runs the simulator as a background `asyncio`
+  task at startup.
+
+No message broker (Kafka/Redis) — a deliberate scope decision for a
+showcase project at this event volume; WebSockets carry the stream
+directly. See the plan history for the fuller rationale and the planned
+next phases (a React frontend consuming `/ws/orders`, then self-hosted
+deployment behind a reverse proxy alongside the existing Streamlit app).

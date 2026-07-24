@@ -27,6 +27,37 @@ The central project question:
 > How can restaurant order, staffing, inventory, menu and customer-experience
 > data be combined to improve daily operational decisions?
 
+## Why I built this
+
+This started as a strict, spec-driven build: the brief required working
+incrementally, phase by phase, and treating each layer's correctness as
+something to *verify against real generated data*, not just assume from
+the formulas. That discipline turned out to be the actual point — a
+synthetic dataset is only useful if it behaves the way the real thing
+would, and most of the interesting work was in catching the gap between
+"the code runs" and "the data is actually right" (see
+`docs/development_log.md` for the specific bugs that gap produced, and
+`docs/project_decisions.md` for the reasoning behind the bigger calls).
+Once the original scope was done, I extended it with a real-time layer —
+a live order-event stream over WebSockets — specifically to go past
+batch analytics into a system that has to keep behaving correctly
+*while running*, not just once at build time. Different problem,
+different failure modes, worth understanding both.
+
+## Contents
+
+- [Demo](#demo)
+- [Disclaimer](#disclaimer)
+- [Tech stack](#tech-stack)
+- [Status](#status)
+- [Setup](#setup)
+- [Seed data](#seed-data)
+- [Generating synthetic operational data](#generating-synthetic-operational-data)
+- [Loading into DuckDB and running dbt](#loading-into-duckdb-and-running-dbt)
+- [Running the dashboard](#running-the-dashboard)
+- [Running the live order stream](#running-the-live-order-stream)
+- [Development](#development)
+
 ## Demo
 
 ```bash
@@ -50,11 +81,12 @@ All data shown is synthetic; see the disclaimer below.
 
 ## Disclaimer
 
-This project uses synthetic operational data generated from configurable
-business rules. Menu names and publicly listed prices are used only as
-reference material. No confidential customer, employee, supplier, recipe,
-financial or transaction data is included. This project is not affiliated
-with Bon Bon Boy and does not use confidential business information.
+Every number in this repository is synthetic, generated from the
+configurable business rules in `config/`. Menu names, categories, and
+prices are illustrative and representative of a casual Vietnamese
+restaurant — not scraped, copied, or sourced from any specific real
+business. No confidential customer, employee, supplier, recipe,
+financial, or transaction data appears anywhere in this project.
 
 ## Tech stack
 
@@ -67,7 +99,8 @@ with Bon Bon Boy and does not use confidential business information.
 | Transformation | [dbt](https://www.getdbt.com/) | Layered SQL (staging → intermediate → dimensions/facts → marts), with dependency resolution, testing, and docs built in. |
 | App | [Streamlit](https://streamlit.io/) + Plotly | Eight pages reading straight from the dbt marts. |
 | Forecasting | [scikit-learn](https://scikit-learn.org/) | Naive/moving-average baselines vs. linear regression and random forest, time-based validated. |
-| Quality | pytest, [Ruff](https://docs.astral.sh/ruff/) | 77 tests including an end-to-end pipeline test; Ruff replaces flake8 + isort + black + pyupgrade in one fast tool. |
+| Live stream | [FastAPI](https://fastapi.tiangolo.com/) + WebSockets | A second, real-time showcase: a Poisson-process order simulator streamed over `/ws/orders`, no message broker needed at this scale. |
+| Quality | pytest, [Ruff](https://docs.astral.sh/ruff/) | 90 tests including an end-to-end pipeline test; Ruff replaces flake8 + isort + black + pyupgrade in one fast tool. |
 | CI | GitHub Actions | Lint → test → generate → load → `dbt build` → verify marts, on every PR. |
 
 See `docs/architecture.md` for how the pieces actually fit together,
@@ -77,21 +110,24 @@ behind the synthetic data, and `docs/project_decisions.md` /
 
 ## Status
 
-Work in progress. Implemented so far: seed data (menu, ingredients,
-suppliers, recipes, employees) with referential-integrity validation and
-estimated food-cost calculation per menu item; a full synthetic
-generation pipeline (daily weather/calendar context, employee shifts,
-orders, order items, customer reviews, and inventory movements) with
-demand, channel, kitchen-load, staffing/absence, and inventory-reorder
-relationships driven by `config/business_rules.yaml`; a complete
-DuckDB + dbt transformation layer (staging → intermediate →
-dimensions/facts → 7 analytical marts, 98 passing dbt checks); an 8-page
-Streamlit dashboard reading from that warehouse (`app/`); and a daily
-order-volume forecast (naive, moving-average, linear regression, and
-random-forest candidates, time-based validated, with a 7-day-ahead
-forecast and a staffing recommendation). See `docs/limitations.md` for
-what the synthetic data does and doesn't represent, and
-`docs/architecture.md` for how the pieces fit together.
+**Complete** — a reproducible synthetic data generator (weather/calendar,
+staffing, orders, inventory, reviews, all driven by
+`config/business_rules.yaml`); a DuckDB + dbt warehouse (staging →
+intermediate → dimensions/facts → 7 marts, 98 passing checks); an 8-page
+Streamlit dashboard; a validated daily order-volume forecast (naive,
+moving-average, linear regression, and random forest, time-based
+validated, with a 7-day-ahead forecast and a staffing recommendation);
+and 90 passing tests. That's the entire original spec.
+
+**Also built, beyond the original scope** — a real-time order-event
+stream (FastAPI + WebSockets, no message broker) as a second,
+complementary showcase alongside the batch pipeline.
+
+**In progress** — a React frontend for the live stream, and self-hosted
+deployment behind a real domain.
+
+See `docs/limitations.md` for what the synthetic data does and doesn't
+represent, and `docs/architecture.md` for how the pieces fit together.
 
 ## Setup
 
@@ -167,6 +203,27 @@ Experience, Demand Forecast), all reading from the dbt-built warehouse —
 none of them touch the raw CSVs directly. See `docs/architecture.md` for
 which pages read straight from a mart and which also query the
 underlying fact/dim tables for grain no mart carries.
+
+## Running the live order stream
+
+```bash
+uv run uvicorn realtime.main:app --reload
+```
+
+A second, real-time showcase alongside the batch dashboard above: a
+Poisson-process order simulator (`src/restaurant_ops/streaming/`) whose
+arrival rate reuses the same weekday/daypart demand shape as the batch
+generator, streamed over a WebSocket — no message broker, no separate
+infrastructure to run. Check it's alive with:
+
+```bash
+curl http://localhost:8000/api/live/summary
+```
+
+or connect to `ws://localhost:8000/ws/orders` for the live event feed. A
+React frontend consuming this endpoint, and self-hosted deployment
+alongside the Streamlit app, are planned next — see
+`docs/architecture.md`.
 
 ## Development
 
