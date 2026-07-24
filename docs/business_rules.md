@@ -252,6 +252,70 @@ own middle, which is why the four categories come out roughly balanced
 in practice (see `docs/development_log.md`) rather than skewed toward
 one label.
 
+## Demand forecast (Phase 8)
+
+Implemented in `src/restaurant_ops/forecasting/`. One row per business
+date, built from `mart_daily_performance` by
+`features.build_feature_frame`:
+
+```
+day_name, month                              -- one-hot encoded for the ML models
+is_weekend, is_public_holiday, is_city_event -- already boolean in the mart
+has_promotion                                -- promotion_name.notna()
+temperature_c, rain_mm
+previous_day_orders   = order_count shifted 1 day
+previous_week_orders  = order_count shifted 7 days
+rolling_7day_avg      = mean of the 7 days *before* the target day
+                         (shifted first, so the target's own count never
+                         leaks into its own feature)
+```
+
+Rows lacking a full 7-day lag history (the first week of the dataset)
+are dropped rather than imputed.
+
+**Validation is strictly chronological** (`evaluation.time_based_split`):
+the last 60 days are held out as a test set, everything before is train
+— never a random split, since shuffling would let a model "see the
+future" via nearby days in its training set.
+
+**Four candidate models** (`models.build_model_registry`), all scored on
+the holdout with MAE/RMSE/MAPE:
+
+- Naive previous week — `predicted(day) = actual order count 7 days earlier`.
+- 7-day moving average — mean of the prior 7 days.
+- Linear regression and Random forest (`scikit-learn`) — fit on the full
+  feature set above.
+
+The Streamlit page picks whichever model scores lowest MAE on the
+holdout, refits it on *all* available history (not just the training
+split — once a model's validated, discarding the most recent real data
+before forecasting the true future would only hurt it), and uses that
+for the 7-day-ahead forecast.
+
+**7-day-ahead forecast mechanics** (`future.forecast_next_days`): the
+historical dataset ends on a fixed date, so the upcoming days have no
+real weather/calendar data yet. `generate_daily_context` (the same
+deterministic generator used to build the original dataset) produces
+those features instead, continued from the configured simulation seed.
+Lag features are filled recursively — `previous_week_orders` always
+falls within real history at a 7-day horizon, but `previous_day_orders`
+and `rolling_7day_avg` for days 2 onward use the model's *own prior
+predictions*, which is how any multi-step forecast has to work, not a bug.
+
+**Staffing recommendation** (`staffing.recommend_staffing`) translates a
+predicted order count into headcount using only observed warehouse data,
+no new hardcoded assumptions:
+
+```
+benchmark (orders/labour-hour) = median orders_per_{kitchen,front_of_house}_labour_hour
+                                  from mart_labour_productivity rows where
+                                  staffing_level_flag = 'Balanced'
+recommended_hours    = predicted_orders / benchmark
+avg_shift_hours       = mean actual_hours from fact_employee_shifts,
+                        excluding absent shifts, per department
+recommended_headcount = ceil(recommended_hours / avg_shift_hours)
+```
+
 ## Weather and calendar assumptions
 
 Temperature follows a synthetic seasonal cosine curve for Melbourne

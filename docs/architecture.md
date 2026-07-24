@@ -151,3 +151,33 @@ str(Path(__file__).resolve().parents[1]))`) rather than relying on
 Streamlit's multipage import behaviour, since that behaviour isn't
 guaranteed to add the same directory to the path for `Home.py` and for
 scripts under `pages/`.
+
+## Forecasting (`src/restaurant_ops/forecasting/`)
+
+A separate package, mirroring the `generation`/`validation` module
+pattern, rather than app-embedded logic — keeps the modelling code
+directly unit-testable without a running warehouse or Streamlit process.
+
+- `features.py` — turns `mart_daily_performance` into a model-ready
+  frame (day-of-week/month, weather, lag/rolling order-count features).
+  Pure function, no I/O.
+- `evaluation.py` — chronological train/test splitting and MAE/RMSE/MAPE.
+- `models.py` — the four candidate models (naive, moving average, linear
+  regression, random forest) behind a shared `fit(train).predict(df)`
+  interface, so the Streamlit page and evaluation loop treat them
+  uniformly.
+- `staffing.py` — translates a predicted order count into a recommended
+  Kitchen/Front of House headcount, entirely from observed
+  `mart_labour_productivity`/`fact_employee_shifts` data.
+- `future.py` — the recursive 7-day-ahead forecast, reusing
+  `restaurant_ops.generation.weather.generate_daily_context` to produce
+  synthetic weather/calendar features for the days beyond the historical
+  dataset's end.
+
+`app/pages/8_Demand_Forecast.py` is a thin consumer of this package: it
+loads `mart_daily_performance`/`mart_labour_productivity` plus
+`fact_employee_shifts` (via a new `database.load_employee_shifts()`,
+following the same fact-table-access pattern as Phase 7's drill-downs),
+runs the pipeline once behind `st.cache_data`, and displays the results.
+See `docs/business_rules.md` for the exact feature list, split, and
+staffing formula.

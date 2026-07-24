@@ -40,17 +40,13 @@ see [Generating synthetic operational data](#generating-synthetic-operational-da
 and [Loading into DuckDB and running dbt](#loading-into-duckdb-and-running-dbt)
 below first.
 
-| Executive Overview | Menu Engineering |
-|---|---|
-| ![Executive Overview](docs/screenshots/executive_overview.png) | ![Menu Engineering](docs/screenshots/menu_engineering.png) |
+[![Executive Overview](docs/screenshots/executive_overview.png)](docs/screenshots.md)
 
-| Channel Profitability | Inventory Risk |
-|---|---|
-| ![Channel Profitability](docs/screenshots/channel_profitability.png) | ![Inventory Risk](docs/screenshots/inventory_risk.png) |
-
-Three more pages not pictured — Service Performance, Labour Productivity,
-Customer Experience — follow the same pattern. All data shown is
-synthetic; see the disclaimer below.
+**→ [See all 8 pages in `docs/screenshots.md`](docs/screenshots.md)** —
+Executive Overview, Menu Engineering, Channel Profitability, Service
+Performance, Labour Productivity, Inventory Risk, Customer Experience,
+and Demand Forecast, each with a short description of what it shows.
+All data shown is synthetic; see the disclaimer below.
 
 ## Disclaimer
 
@@ -69,8 +65,9 @@ with Bon Bon Boy and does not use confidential business information.
 | Validation | Pydantic v2 | Seed data (menu, ingredients, employees...) is validated row-by-row on load; generated tables use vectorised pandas checks at scale. |
 | Warehouse | [DuckDB](https://duckdb.org/) | Single-file, zero-config, embedded OLAP engine — no server to run for ~170k rows of synthetic data. |
 | Transformation | [dbt](https://www.getdbt.com/) | Layered SQL (staging → intermediate → dimensions/facts → marts), with dependency resolution, testing, and docs built in. |
-| App | [Streamlit](https://streamlit.io/) + Plotly | Seven pages reading straight from the dbt marts. |
-| Quality | pytest, [Ruff](https://docs.astral.sh/ruff/) | 60+ tests including an end-to-end pipeline test; Ruff replaces flake8 + isort + black + pyupgrade in one fast tool. |
+| App | [Streamlit](https://streamlit.io/) + Plotly | Eight pages reading straight from the dbt marts. |
+| Forecasting | [scikit-learn](https://scikit-learn.org/) | Naive/moving-average baselines vs. linear regression and random forest, time-based validated. |
+| Quality | pytest, [Ruff](https://docs.astral.sh/ruff/) | 77 tests including an end-to-end pipeline test; Ruff replaces flake8 + isort + black + pyupgrade in one fast tool. |
 | CI | GitHub Actions | Lint → test → generate → load → `dbt build` → verify marts, on every PR. |
 
 See `docs/architecture.md` for how the pieces actually fit together, and
@@ -87,11 +84,13 @@ orders, order items, customer reviews, and inventory movements) with
 demand, channel, kitchen-load, staffing/absence, and inventory-reorder
 relationships driven by `config/business_rules.yaml`; a complete
 DuckDB + dbt transformation layer (staging → intermediate →
-dimensions/facts → 7 analytical marts, 98 passing dbt checks); and a
-7-page Streamlit dashboard reading from that warehouse (`app/`).
-Demand forecasting is still to come. See `docs/limitations.md` for what
-the synthetic data does and doesn't represent, and `docs/architecture.md`
-for how the pieces fit together.
+dimensions/facts → 7 analytical marts, 98 passing dbt checks); an 8-page
+Streamlit dashboard reading from that warehouse (`app/`); and a daily
+order-volume forecast (naive, moving-average, linear regression, and
+random-forest candidates, time-based validated, with a 7-day-ahead
+forecast and a staffing recommendation). See `docs/limitations.md` for
+what the synthetic data does and doesn't represent, and
+`docs/architecture.md` for how the pieces fit together.
 
 ## Setup
 
@@ -161,12 +160,12 @@ uv run dbt docs serve --project-dir dbt_restaurant --profiles-dir dbt_restaurant
 uv run streamlit run app/Home.py
 ```
 
-Seven pages (Executive Overview, Menu Engineering, Channel Profitability,
+Eight pages (Executive Overview, Menu Engineering, Channel Profitability,
 Service Performance, Labour Productivity, Inventory Risk, Customer
-Experience), all reading from the dbt-built warehouse — none of them
-touch the raw CSVs directly. See `docs/architecture.md` for which pages
-read straight from a mart and which also query the underlying fact/dim
-tables for grain no mart carries.
+Experience, Demand Forecast), all reading from the dbt-built warehouse —
+none of them touch the raw CSVs directly. See `docs/architecture.md` for
+which pages read straight from a mart and which also query the
+underlying fact/dim tables for grain no mart carries.
 
 ## Development
 

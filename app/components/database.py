@@ -123,3 +123,12 @@ def prep_time_vs_promised_by_daypart() -> pd.DataFrame:
         group by 1, 2
     """
     return get_connection().execute(query).fetchdf()
+
+
+@st.cache_data
+def load_employee_shifts() -> pd.DataFrame:
+    """Per-shift labour data, used by the forecasting page to translate a
+    predicted order count into a recommended headcount — no mart carries
+    per-shift grain."""
+    query = "select department, actual_hours, is_absent from main.fact_employee_shifts"
+    return get_connection().execute(query).fetchdf()
